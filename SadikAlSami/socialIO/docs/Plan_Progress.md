@@ -584,9 +584,10 @@ The REST presence endpoint belongs to Day 2; WS presence wiring is Day 3.
 
 ##### E3. Profile service (`apps/server/src/services/profile.service.ts`)
 
-- [ ] `getProfile(userId)` — returns profile or null
-- [ ] `createProfile({ userId, displayName, avatarUrl?, bio? })` — inserts, handles 23505 uniqueness error
-- [ ] `updateProfile(userId, patch)` — partial update, handles 23505
+- [x] `getProfile(userId)` — returns profile or null
+- [x] `createProfile({ userId, displayName, avatarUrl?, bio? })` — inserts, handles 23505 uniqueness error
+- [x] `updateProfile(userId, patch)` — partial update, handles 23505
+- [x] `updateProfileImage(userId, data)` — update avatar, handles 23505
 
 ##### E4. User service (`apps/server/src/services/user.service.ts`)
 
@@ -608,9 +609,9 @@ The REST presence endpoint belongs to Day 2; WS presence wiring is Day 3.
 
 ##### E7. Controllers, routes, and middleware
 
-- [ ] Controllers in `apps/server/src/controllers` (profile, users, conversations, messages)
-- [ ] Routers in `apps/server/src/routes` (profile, users, conversations, messages) and mount in `apps/server/src/index.ts`
-- [ ] Auth middleware: `isAuthenticated` in `apps/server/src/middlewares/auth.middlewares.ts` (sets `user`/`session` in context)
+- [ ] Services in `apps/server/src/services` (profile, users, conversations, messages)
+- [ ] Controllers in `apps/server/src/controllers` (profile, users, conversations, messages) and mount in `apps/server/src/index.ts`
+- [x] Auth middleware: `isAuthenticated` in `apps/server/src/middlewares/auth.middlewares.ts` (sets `user`/`session` in context)
 - [ ] Participant guard middleware: add `isParticipant` in `apps/server/src/middlewares` (403 if not a member)
 - [ ] Validation middleware: `validate` from `apps/server/src/middlewares/validation.middlewares.ts`
 
