@@ -186,7 +186,7 @@ Measured cost on Node.js with OpenSSL AES-NI hardware acceleration:
 
 Encryption contributes about 1% of total request time on a cache miss and 0% on a cache hit. The DB network hop is the real bottleneck, not crypto.
 
-### Utility contract (`packages/db/src/crypto.ts`)
+### Utility contract (`packages/db/src/lib/crypto.lib.ts`)
 
 - `encrypt(plaintext: string): { content_enc: string, content_iv: string }`
   - Generates a fresh random 12-byte IV per message.
@@ -370,29 +370,346 @@ Deliverable:
 
 ---
 
-### Day 2 - Chat Core HTTP + Types
+### Day 2 — Schema Update + Profile + Search + Chat Core HTTP
 
-Backend todos:
+Day2_Extension.md is now merged into this section and kept only as a reference.
 
-- [x] Define shared Zod schemas for conversation and message inputs/outputs (chat), user and profile in `packages/db/src/validators` - these are the ones that will decide what enters and exits the database
-- [x] Use shared Zod schemas and implment validators in `apps/server/src/validators` - these are the ones that decide what enters and exits the server API layer
-- [x] Implement auth, error and validation middleware in apps/server/src/middlewares
-- [x] Add hono and app environments for typed context (`zValidator` output + auth session)
-- [ ] Add Hono routes for conversations and messages with `zValidator` and typed responses
-- [ ] Implement `packages/db/src/crypto.ts` (`encrypt`, `decrypt`)
-- [ ] Implement `formatMessage()` boundary in `message.service.ts` (ciphertext never exits this function)
-- [ ] Implement sequence-number transaction strategy (`SELECT FOR UPDATE`) and atomic `last_message_id` update
-- [ ] Add cursor-based pagination by `sequence_number` (limit 30)
+#### A. Schema changes (do first — before any Day 2 code)
 
-Frontend todos:
+Three changes to the existing schema:
 
-- [ ] Create chat shell route (`/chat`) with empty states
-- [ ] Add data hooks for conversation list + message list (typed fetchers)
-- [ ] Add basic composer UI and send action wiring (no realtime yet)
+**1. Make `display_name` unique** (done)
 
-Deliverable:
+```ts
+// packages/db/src/schema/profile.ts
+import { text, timestamp, pgTable, index } from "drizzle-orm/pg-core";
+import { user } from "./auth";
 
-- End-to-end chat via HTTP (no realtime yet) with typed, validated APIs. Encryption verified by inspecting DB rows directly.
+export const userProfile = pgTable(
+  "user_profile",
+  {
+    id: text("id")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    displayName: text("display_name").notNull().unique(),
+    avatarUrl: text("avatar_url"),
+    bio: text("bio"),
+    lastSeenAt: timestamp("last_seen_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [index("user_profile_display_name_idx").on(table.displayName)],
+  // The GIN trigram index lives in the custom migration file:
+  // packages/db/src/migrations/0002_enable_pg_trgm.sql
+);
+```
+
+**2. Add trigram extension to your migration** (done)
+
+```sql
+-- packages/db/src/migrations/0002_enable_pg_trgm.sql
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+CREATE INDEX IF NOT EXISTS profile_display_name_trgm_idx
+  ON user_profile USING gin (display_name gin_trgm_ops);
+```
+
+**3. After schema change: generate + migrate + push** (done)
+
+```bash
+pnpm --filter @socialIO/db db:generate
+pnpm --filter @socialIO/db db:migrate
+pnpm --filter @socialIO/db db:push
+```
+
+#### B. Profile setup flow (no auto-create on signup)
+
+Better Auth creates the `user` row on signup. Your app does **not** auto-create `user_profile`. After every login, the frontend checks whether a profile exists. If not, it redirects to `/profile/setup` before the user can access `/chat`.
+
+This is the correct design because:
+- Auto-creating an empty profile violates the `display_name NOT NULL` constraint
+- Even if you allowed null display names, search would be broken for those users
+- Forcing profile setup is the standard pattern (Discord, Notion, Linear all do this)
+
+**Profile existence check**
+
+```ts
+// apps/server/src/routes/profile.ts
+profileRouter.get("/me", isAuthenticated, async (c) => {
+  const sessionUser = c.get("user")!;
+  const userId = sessionUser.id;
+
+  const [profile] = await db
+    .select()
+    .from(userProfile)
+    .where(eq(userProfile.id, userId));
+
+  if (!profile) {
+    return c.json({ exists: false }, 404);
+  }
+
+  return c.json({ exists: true, profile });
+});
+```
+
+**Profile setup route**
+
+```ts
+// apps/server/src/routes/profile.ts
+const createProfileSchema = z.object({
+  displayName: z
+    .string()
+    .min(3, "Display name must be at least 3 characters")
+    .max(32, "Display name must be at most 32 characters")
+    .regex(/^[a-zA-Z0-9_]+$/, "Only letters, numbers, and underscores"),
+  avatarUrl: z.url().optional(),
+  bio: z.string().max(160).optional(),
+});
+
+profileRouter.post(
+  "/",
+  isAuthenticated,
+  validate("json", createProfileSchema),
+  async (c) => {
+    const sessionUser = c.get("user")!;
+    const userId = sessionUser.id;
+    const body = c.req.valid("json");
+
+    const [existing] = await db
+      .select({ id: userProfile.id })
+      .from(userProfile)
+      .where(eq(userProfile.id, userId));
+
+    if (existing) {
+      return c.json({ error: "Profile already exists" }, 409);
+    }
+
+    try {
+      const [created] = await db
+        .insert(userProfile)
+        .values({
+          id: userId,
+          displayName: body.displayName,
+          avatarUrl: body.avatarUrl ?? null,
+          bio: body.bio ?? null,
+        })
+        .returning();
+
+      return c.json(created, 201);
+    } catch (err: any) {
+      if (err.code === "23505") {
+        return c.json(
+          { error: "Display name is already taken. Please choose another." },
+          409,
+        );
+      }
+      throw err;
+    }
+  },
+);
+```
+
+#### C. User search
+
+Endpoint:
+```
+GET /api/users/search?q={query}
+```
+
+- Requires auth (session cookie)
+- Excludes the requesting user from results
+- Searches `display_name` via trigram ILIKE
+- Also searches `email` as a secondary path (prefix match)
+- Returns max 20 results (people picker)
+- Returns only `id`, `displayName`, `avatarUrl`
+
+```ts
+// apps/server/src/routes/users.ts
+const searchQuerySchema = z.object({
+  q: z.string().min(2, "Search query must be at least 2 characters").max(50),
+});
+
+usersRouter.get(
+  "/search",
+  isAuthenticated,
+  validate("query", searchQuerySchema),
+  async (c) => {
+    const sessionUser = c.get("user")!;
+    const { q } = c.req.valid("query");
+
+    const results = await searchUsers(q, sessionUser.id);
+    return c.json(results);
+  },
+);
+```
+
+#### D. Online/offline presence and last seen
+
+Two separate concerns — do not conflate them:
+
+| Concern | Storage | Updated when | Used for |
+|---|---|---|---|
+| **Online now** (green dot) | Redis `presence:user:{id}` HASH, TTL 30s | WS connect, heartbeat every 20s | Live indicator in chat UI |
+| **Last seen** (e.g. "3h ago") | `user_profile.last_seen_at` timestamp | WS disconnect | Shown when user is offline |
+
+The REST presence endpoint belongs to Day 2; WS presence wiring is Day 3.
+
+---
+
+#### E. Day 2 todos — updated and complete
+
+##### E0. Shared schemas + typed context (done)
+
+- [x] Define shared Zod schemas for chat/user/profile in `packages/db/src/validators`
+- [x] Implement API validators in `apps/server/src/validators`
+- [x] Implement auth/error/validation middleware in `apps/server/src/middlewares`
+- [x] Add typed context helpers in `apps/server/src/types/app-env.ts` and `apps/server/src/types/hono-env.ts`
+
+##### E1. Schema (already done)
+
+- [x] Add `unique()` to `userProfile.displayName` in `packages/db/src/schema/profile.ts`
+- [x] Add trigram index `profile_display_name_trgm_idx` (GIN, `gin_trgm_ops`) in `packages/db/src/migrations/0002_enable_pg_trgm.sql`
+- [x] Add `CREATE EXTENSION IF NOT EXISTS pg_trgm` to `packages/db/src/migrations/0002_enable_pg_trgm.sql`
+- [x] Run `db:generate` → `db:migrate` → `db:push`
+- [x] Verify in psql: `\d user_profile` shows UNIQUE on `display_name`, `\di` shows the GIN index
+
+##### E2. Crypto
+
+- [x] Implement `packages/db/src/lib/crypto.lib.ts` (`encrypt`, `decrypt`, `getKey`)
+- [x] Run benchmark: `pnpm tsx packages/db/src/lib/crypto.test.ts` (from `apps/server` with `DOTENV_CONFIG_PATH=.env`)
+- [x] Manually verify round-trip: `decrypt(encrypt("hello")) === "hello"`
+
+##### E3. Profile service (`apps/server/src/services/profile.service.ts`)
+
+- [ ] `getProfile(userId)` — returns profile or null
+- [ ] `createProfile({ userId, displayName, avatarUrl?, bio? })` — inserts, handles 23505 uniqueness error
+- [ ] `updateProfile(userId, patch)` — partial update, handles 23505
+
+##### E4. User service (`apps/server/src/services/user.service.ts`)
+
+- [ ] `searchUsers(query, requestingUserId)` — trigram ILIKE on display_name + prefix on email, max 20
+- [ ] `getUserPresence(userIds[])` — Redis pipeline EXISTS check, returns `Record<string, boolean>`
+
+##### E5. Conversation service (`apps/server/src/services/conversation.service.ts`)
+
+- [ ] `findOrCreateDm(userAId, userBId)` — sort IDs, check existing, create if not found
+- [ ] `createGroup({ name, creatorId, participantIds[] })` — insert conversation + participants, creator gets role admin
+- [ ] `getUserConversations(userId)` — join with last_message + sender profile for preview
+- [ ] `getConversationById(id, requestingUserId)` — single conversation with participants, auth check
+
+##### E6. Message service (`apps/server/src/services/message.service.ts`)
+
+- [ ] `formatMessage(row)` — decrypt boundary, never exposes content_enc/content_iv
+- [ ] `sendMessage({ conversationId, senderId, content, type, imageUrl?, replyToId? })` — encrypt, FOR UPDATE txn, last_message_id update
+- [ ] `getMessages({ conversationId, cursor?, limit? })` — cursor pagination by sequence_number DESC
+
+##### E7. Controllers, routes, and middleware
+
+- [ ] Controllers in `apps/server/src/controllers` (profile, users, conversations, messages)
+- [ ] Routers in `apps/server/src/routes` (profile, users, conversations, messages) and mount in `apps/server/src/index.ts`
+- [ ] Auth middleware: `isAuthenticated` in `apps/server/src/middlewares/auth.middlewares.ts` (sets `user`/`session` in context)
+- [ ] Participant guard middleware: add `isParticipant` in `apps/server/src/middlewares` (403 if not a member)
+- [ ] Validation middleware: `validate` from `apps/server/src/middlewares/validation.middlewares.ts`
+
+Routes to implement:
+
+```
+GET  /api/profile/me                   → getProfile, 404 if not found
+POST /api/profile                      → createProfile (setup page submit)
+PATCH /api/profile/me                  → updateProfile (settings page)
+
+GET  /api/users/search?q=              → searchUsers (min 2 chars)
+GET  /api/users/presence?ids=          → getUserPresence (comma-separated IDs)
+
+GET  /api/conversations                → getUserConversations
+POST /api/conversations                → findOrCreateDm | createGroup
+GET  /api/conversations/:id            → getConversationById (participant guard)
+
+GET  /api/conversations/:id/messages   → getMessages (participant guard, cursor pagination)
+POST /api/conversations/:id/messages   → sendMessage (participant guard, encrypt)
+```
+
+##### E8. Frontend
+
+- [ ] After login: call `GET /api/profile/me` → redirect to `/profile/setup` if 404
+- [ ] `/profile/setup` page: form prefilled with `user.name` and `user.image`, submit calls `POST /api/profile`, on success redirect to `/chat`
+- [ ] `/chat` shell: conversation list sidebar + empty thread state
+- [ ] "New Chat" button → search modal → `GET /api/users/search?q=` (debounced 300ms) → click result → `POST /api/conversations` → navigate to conversation
+- [ ] Conversation list: renders each item with avatar, display name, last message preview
+- [ ] Thread view: renders messages from `GET /api/conversations/:id/messages`
+- [ ] Composer: text input → `POST /api/conversations/:id/messages` → TanStack Query invalidates → thread re-renders
+
+##### E9. Day 2 verification checklist
+
+```bash
+# Schema
+psql → \d user_profile → display_name has UNIQUE constraint
+psql → \di → profile_display_name_trgm_idx exists
+
+# Crypto
+pnpm tsx packages/db/src/lib/crypto.test.ts → sub-0.01ms per op
+
+# Encryption boundary
+rg -n "content_enc|content_iv" apps/server/src/routes  → zero hits
+psql → SELECT content_enc FROM message LIMIT 1 → shows ciphertext, not plaintext
+
+# Profile
+curl POST /api/profile { displayName: "simanto" } → 201 created
+curl POST /api/profile { displayName: "simanto" } again → 409 taken
+
+# Search
+curl GET /api/users/search?q=si → results, no self in list
+curl GET /api/users/search?q=s  → 422 too short
+
+# DM idempotency
+curl POST /api/conversations { type: "dm", participantId: "X" } → conv id "abc"
+curl POST /api/conversations { type: "dm", participantId: "X" } → same "abc"
+
+# Messages
+curl POST /api/conversations/abc/messages { content: "hello" } → 201, content: "hello"
+psql → SELECT content_enc FROM message → ciphertext, not "hello"
+curl GET /api/conversations/abc/messages → [{ content: "hello", sequenceNumber: 1 }]
+
+# Auth
+curl GET /api/conversations (no cookie) → 401
+curl GET /api/conversations/abc/messages (not a participant) → 403
+```
+
+#### F. Presence notes for Day 3
+
+Day 2 only needs the REST presence endpoint (`GET /api/users/presence?ids=`). Day 3 adds:
+
+- `SET presence:user:{id}` on WS connect
+- `EXPIRE` refresh on heartbeat (every 20s)
+- `DEL presence:user:{id}` + `UPDATE user_profile SET last_seen_at` on WS disconnect
+- `presence_update` WS broadcast to shared conversations on connect/disconnect
+
+#### G. Gap verification (after merge)
+
+| Area | Status |
+|---|---|
+| Auth (signup/login) | Covered — Better Auth handles this |
+| Profile setup gate | Covered — Section B |
+| Display name uniqueness + index | Covered — Section A |
+| User search | Covered — Section C |
+| DM creation (find or create) | Covered — Section E5 |
+| Group creation | Covered — Section E5 |
+| Live presence (green dot) | Covered — Section D, wired in Day 3 |
+| Last seen timestamp | Covered — Section D, written on WS disconnect |
+| Message send with encryption | Covered — Section E6 |
+| Message pagination | Covered — Section E6 |
+| Conversation list with preview | Covered — Section E5 |
+| Redis cache (hot conversations) | Covered — Day 3 |
+| Typing indicators | Covered — Day 3 |
+| Message status (delivered/seen) | Covered — Day 4 |
+| Group roles + member management | Covered — Day 5 |
+| Reactions | Covered — Day 5 |
+| Image upload | Covered — Day 6 |
+| Message edit + cache invalidation | Covered — Day 6 |
+| Deployment | Covered — Day 7 |
 
 ---
 
@@ -401,6 +718,7 @@ Deliverable:
 Backend todos:
 
 - [ ] WebSocket upgrade and connection lifecycle
+- [ ] Presence WS wiring depends on Day 2 presence REST endpoint and `last_seen_at`
 - [ ] Redis pub/sub fan-out on `conversation:{conversationId}`
 - [ ] Typing key TTL (5s) and presence heartbeat TTL (30s)
 - [ ] Emit `conversation_updated` for chat list reordering
@@ -542,7 +860,14 @@ Current `apps/server` has only entry-level wiring. The following structure is th
 ```txt
 apps/server/src/
   index.ts
+  controllers/
+    profile.controller.ts
+    users.controller.ts
+    conversations.controller.ts
+    messages.controller.ts
   routes/
+    profile.ts
+    users.ts
     conversations.ts
     messages.ts
     members.ts
@@ -552,12 +877,15 @@ apps/server/src/
     handler.ts
     redis-pubsub.ts
   services/
+    profile.service.ts
+    user.service.ts
+    conversation.service.ts
     message.service.ts     <- encrypt/decrypt boundary lives here
     redis.service.ts       <- cache read/write/invalidate
     upload.service.ts      <- Cloudinary sign + delete
 
 packages/db/src/
-  crypto.ts                <- encrypt(), decrypt(), getKey()
+  lib/crypto.lib.ts         <- encrypt(), decrypt(), getKey()
   redis.ts                 <- getRedis(), getPub(), getSub(), RedisKeys, RedisTTL
   schema/
     auth.ts
@@ -630,7 +958,7 @@ rg -n "ZADD\|ZREMRANGE\|zremrangebyscore\|zadd" apps/server/src/services/redis.s
 rg -n "redis_data_model|pagination_and_chatlist|message_flow|system_overview" docs/DraftPlan.md
 ```
 
-Encryption boundary rule: `content_enc` and `content_iv` must never appear outside `packages/db/src/crypto.ts` and `apps/server/src/services/message.service.ts`. If `rg -n "content_enc" apps/server/src/routes` returns any hits, that is a boundary violation.
+Encryption boundary rule: `content_enc` and `content_iv` must never appear outside `packages/db/src/lib/crypto.lib.ts` and `apps/server/src/services/message.service.ts`. If `rg -n "content_enc" apps/server/src/routes` returns any hits, that is a boundary violation.
 
 ---
 
