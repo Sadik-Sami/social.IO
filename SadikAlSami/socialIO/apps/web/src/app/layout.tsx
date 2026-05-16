@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "socialIO",
-  description: "socialIO",
+  title: "social.io",
+  description: "The next-generation messaging platform.",
 };
 
 export default function RootLayout({

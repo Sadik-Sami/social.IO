@@ -39,26 +39,6 @@ export const reactionEmojiParamSchema = z.object({
 	emoji: z.string().min(1).max(MESSAGE_REACTION_EMOJI_MAX),
 });
 
-// export const createConversationBodySchema = conversationInsertSchema
-// 	.pick({ type: true, name: true, avatarUrl: true })
-// 	.superRefine((data, ctx) => {
-// 		if (data.type === 'group' && !data.name) {
-// 			ctx.addIssue({
-// 				code: 'custom',
-// 				message: 'name is required for group conversations',
-// 				path: ['name'],
-// 			});
-// 		}
-
-// 		if (data.type === 'dm' && data.name) {
-// 			ctx.addIssue({
-// 				code: 'custom',
-// 				message: 'name must be empty for dm conversations',
-// 				path: ['name'],
-// 			});
-// 		}
-// 	});
-
 export const createDmConversationBodySchema = z.object({
 	type: z.literal('dm'),
 	participantId: z.string().min(1),
@@ -76,8 +56,6 @@ export const createConversationBodySchema = z.discriminatedUnion('type', [
 	createGroupConversationBodySchema,
 ]);
 
-// -------------------------------
-
 export const updateConversationBodySchema = conversationUpdateSchema
 	.pick({ name: true, avatarUrl: true })
 	.superRefine((data, ctx) => {
@@ -92,7 +70,6 @@ export const updateConversationBodySchema = conversationUpdateSchema
 
 export const conversationResponseSchema = conversationSelectSchema;
 
-// TEST (Added for testing)
 export const conversationListItemSchema = conversationResponseSchema.extend({
 	lastMessage: z
 		.object({
@@ -127,8 +104,6 @@ export const createGroupBodySchema = z.object({
 	participantIds: z.array(z.string()).min(1).max(49),
 	avatarUrl: z.url().optional(),
 });
-
-// ------------------------------
 
 const messageTypeInputSchema = z.enum(['text', 'image']);
 

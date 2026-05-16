@@ -330,21 +330,21 @@ Key points:
 - [x] Basic Hono server bootstrapped
 - [x] Local Postgres + Redis infra setup in `packages/db`
 - [x] Chat domain Drizzle schema implementation
-- [ ] Chat HTTP APIs
-- [ ] Realtime WebSocket flow
+- [x] Chat HTTP APIs
+- [x] Realtime WebSocket flow
 
 ### Product features
 
-- [ ] DM and group conversation creation
-- [ ] Cursor-based message pagination
-- [ ] Typing indicators
-- [ ] Message delivered/seen lifecycle
-- [ ] Group membership admin flows
+- [x] DM and group conversation creation
+- [x] Cursor-based message pagination
+- [x] Typing indicators
+- [x] Message delivered/seen lifecycle
+- [x] Group membership admin flows
 - [ ] Emoji reactions
 - [ ] Image message flow (Cloudinary signed upload)
-- [ ] Redis hot cache and pub/sub fan-out
-- [ ] Encryption at rest for message content (AES-256-GCM)
-- [ ] Cache invalidation on new message, edit, and delete
+- [x] Redis hot cache and pub/sub fan-out
+- [x] Encryption at rest for message content (AES-256-GCM)
+- [x] Cache invalidation on new message, edit, and delete
 
 ---
 
@@ -704,13 +704,13 @@ Day 2 presence REST endpoint is deferred. Day 3 adds:
 
 Backend todos:
 
-- [ ] WebSocket upgrade and connection lifecycle
-- [ ] Presence WS wiring depends on Day 2 presence REST endpoint and `last_seen_at`
-- [ ] Redis pub/sub fan-out on `conversation:{conversationId}`
-- [ ] Typing key TTL (5s) and presence heartbeat TTL (30s)
-- [ ] Emit `conversation_updated` for chat list reordering
-- [ ] Redis ZSET cache populate on first DB read (already-decrypted JSON, scored by `sequence_number`)
-- [ ] Cache read path: `ZREVRANGEBYSCORE` before DB query on conversation open
+- [x] WebSocket upgrade and connection lifecycle
+- [x] Presence WS wiring depends on Day 2 presence REST endpoint and `last_seen_at`
+- [x] Redis pub/sub fan-out on `conversation:{conversationId}`
+- [x] Typing key TTL (5s) and presence heartbeat TTL (30s)
+- [x] Emit `conversation_updated` for chat list reordering
+- [x] Redis ZSET cache populate on first DB read (already-decrypted JSON, scored by `sequence_number`)
+- [x] Cache read path: `ZREVRANGEBYSCORE` before DB query on conversation open
 
 Frontend todos:
 
@@ -728,10 +728,10 @@ Deliverable:
 
 Backend todos:
 
-- [ ] Delivered/seen persistence and broadcast
-- [ ] Conversation list fetch by `last_message_id` with preview data
-- [ ] Read-receipt behavior for DM and group contexts
-- [ ] Cache append on new message send (Problem 2 solution: pipeline ZADD + ZREMRANGEBYRANK + EXPIRE)
+- [x] Delivered/seen persistence and broadcast
+- [x] Conversation list fetch by `last_message_id` with preview data
+- [x] Read-receipt behavior for DM and group contexts
+- [x] Cache append on new message send (Problem 2 solution: pipeline ZADD + ZREMRANGEBYRANK + EXPIRE)
 
 Frontend todos:
 
@@ -846,34 +846,50 @@ Current `apps/server` has only entry-level wiring. The following structure is th
 
 ```txt
 apps/server/src/
-  index.ts
+  app.ts <- Hono App (routes, middleware)
+  index.ts <- Bootstrap (Websocket + Redis + Hono + Auth)
   controllers/
     profile.controller.ts
     users.controller.ts
     conversations.controller.ts
     messages.controller.ts
-  routes/
-    profile.ts
-    users.ts
-    conversations.ts
-    messages.ts
-    members.ts
-    reactions.ts
-    upload.ts
   ws/
-    handler.ts
-    redis-pubsub.ts
+    handler.ts <- websocket handler + upgrade
+    index.ts <- Barrel export
+    pubsub.ts <- redis pub/sub
+    registry.ts <- manage connections
+    server.ts <- websocket server
+    types.ts <- typescript interfaces
   services/
     profile.service.ts
     user.service.ts
     conversation.service.ts
-    message.service.ts     <- encrypt/decrypt boundary lives here
-    redis.service.ts       <- cache read/write/invalidate
-    upload.service.ts      <- Cloudinary sign + delete
+    message.service.ts
+    upload.service.ts
+    presence.service.ts
+    typing.service.ts
+  validators/
+    chat.validator.ts
+    index.ts
+    profile.validator.ts
+    user.validator.ts
+  middlewares/
+    auth.middleware.ts
+    error.middleware.ts
+    index.ts
+    validation.middleware.ts
+  types/
+    app-env.ts
+    hono-env.ts
 
 packages/db/src/
-  lib/crypto.lib.ts         <- encrypt(), decrypt(), getKey()
-  redis.ts                 <- getRedis(), getPub(), getSub(), RedisKeys, RedisTTL
+  lib/
+    crypto.lib.ts
+  migrations/
+    *.sql
+  redis/
+    index.ts <- redis client
+    service.ts <- redis services
   schema/
     auth.ts
     enums.ts
@@ -881,21 +897,33 @@ packages/db/src/
     chat.ts
     relations.ts
     index.ts
+  validators/
+    index.ts
+    profile.validator.ts
+    chat.validator.ts
+    user.validator.ts
+  index.ts
+  docker-compose.yml
+  drizzle.config.ts
 ```
 
 ---
 
 ## 11. Environment Variables
 
-### Current baseline (observed)
+### Current (available)
 
 Server:
-
+- `PORT`
 - `DATABASE_URL`
 - `REDIS_URL`
 - `BETTER_AUTH_SECRET`
 - `BETTER_AUTH_URL`
 - `CORS_ORIGIN`
+- `ALGORITHM`
+- `IV_BYTES`
+- `TAG_BYTES`
+- `ENCRYPTION_KEY`
 
 Web:
 
@@ -905,7 +933,6 @@ Web:
 
 Server:
 
-- `ENCRYPTION_KEY` - 64-char hex string (32 bytes). Generate: `openssl rand -hex 32`
 - `CLOUDINARY_CLOUD_NAME`
 - `CLOUDINARY_API_KEY`
 - `CLOUDINARY_API_SECRET`

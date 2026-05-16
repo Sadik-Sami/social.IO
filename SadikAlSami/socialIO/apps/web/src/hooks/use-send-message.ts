@@ -1,0 +1,61 @@
+import { useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
+
+import { api } from '@/lib/api';
+import { messageKeys } from '@/lib/query-keys';
+import type { MessagePage, MessageResponse } from '@/types/api';
+
+/**
+ * @description
+ * Sends a message via POST and optimistically prepends it to the InfiniteData cache.
+ * On error, rolls back. On success, WS new_message replaces the temp entry.
+ */
+export function useSendMessage() {
+	const qc = useQueryClient();
+
+	return useMutation({
+		mutationFn: ({ conversationId, content }: { conversationId: string; content: string }) =>
+			api.post(`/api/conversations/${conversationId}/messages`, { content, type: 'text' }),
+
+		onMutate: async ({ conversationId, content }) => {
+			await qc.cancelQueries({ queryKey: messageKeys.list(conversationId) });
+
+			const previous = qc.getQueryData<InfiniteData<MessagePage>>(messageKeys.list(conversationId));
+
+			const optimistic: MessageResponse = {
+				id: `temp-${Date.now()}`,
+				conversationId,
+				senderId: 'me',
+				sequenceNumber: -1,
+				content,
+				type: 'text',
+				imageUrl: null,
+				replyToId: null,
+				isEdited: false,
+				editedAt: null,
+				isDeleted: false,
+				deletedAt: null,
+				createdAt: new Date().toISOString(),
+			};
+
+			qc.setQueryData<InfiniteData<MessagePage>>(messageKeys.list(conversationId), (old) => {
+				if (!old) return old;
+				const newPages = [...old.pages];
+				newPages[0] = {
+					...newPages[0],
+					messages: [optimistic, ...newPages[0].messages],
+				};
+				return { ...old, pages: newPages };
+			});
+
+			return { previous };
+		},
+
+		onError: (_err, { conversationId }, context) => {
+			if (context?.previous) {
+				qc.setQueryData(messageKeys.list(conversationId), context.previous);
+			}
+		},
+
+		// No onSettled invalidation — WS new_message replaces the temp entry with real data.
+	});
+}
