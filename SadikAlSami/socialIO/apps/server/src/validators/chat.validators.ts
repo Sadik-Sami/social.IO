@@ -70,7 +70,15 @@ export const updateConversationBodySchema = conversationUpdateSchema
 
 export const conversationResponseSchema = conversationSelectSchema;
 
+/** Minimal participant info */
+export const conversationListParticipantSchema = z.object({
+	userId: z.string(),
+	displayName: z.string().nullable(),
+	avatarUrl: z.string().nullable(),
+});
+
 export const conversationListItemSchema = conversationResponseSchema.extend({
+	participants: z.array(conversationListParticipantSchema),
 	lastMessage: z
 		.object({
 			id: z.string(),
@@ -138,6 +146,8 @@ export const editMessageBodySchema = z.object({
 export const messageResponseSchema = messageSelectSchema.omit({ contentEnc: true, contentIv: true }).extend({
 	content: z.string().min(MESSAGE_CONTENT_MIN).max(MESSAGE_CONTENT_MAX).nullable(),
 	senderDisplayName: z.string().nullable().optional(),
+	deliveredCount: z.number().int().default(0),
+	seenCount: z.number().int().default(0),
 });
 
 export const messageListQuerySchema = z.object({

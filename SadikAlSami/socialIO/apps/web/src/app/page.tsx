@@ -24,7 +24,7 @@ export default function Home() {
   useEffect(() => {
     if (!isPending && minDelayPassed) {
       if (session) {
-        router.push("/dashboard");
+        router.push("/chat");
       } else {
         router.push("/login");
       }

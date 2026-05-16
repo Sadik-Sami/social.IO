@@ -62,7 +62,7 @@ export const inboundEventSchema = z.discriminatedUnion('type', [
 		conversationId: z.string(),
 		messageId: z.string(),
 		userId: z.string(),
-		status: z.literal('seen'),
+		status: z.enum(['delivered', 'seen']),
 	}),
 	z.object({
 		type: z.literal('conversation_updated'),

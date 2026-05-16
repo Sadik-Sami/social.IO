@@ -53,7 +53,7 @@ export default function OnboardingForm() {
       // Create a temporary object URL for the preview
       const previewUrl = URL.createObjectURL(file);
       setAvatarPreview(previewUrl);
-      
+
       // TODO: Later, wire this up to use Cloudinary signed uploads
     }
   };
@@ -62,15 +62,15 @@ export default function OnboardingForm() {
     try {
       // In the future, if an avatar is selected, upload to Cloudinary here
       // and get the resulting URL before calling createProfile.
-      
+
       await createProfile({
         displayName: data.displayName,
         bio: data.bio || undefined,
         avatarUrl: undefined, // Replace with Cloudinary URL later
       });
-      
+
       toast.success("Profile created successfully!");
-      router.push("/dashboard");
+      router.push("/chat" as any);
     } catch (error) {
       toast.error("Failed to create profile. Please try again.");
       console.error(error);
@@ -104,7 +104,7 @@ export default function OnboardingForm() {
                 {getInitials(displayNameValue)}
               </span>
             )}
-            
+
             <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
               <Camera className="h-6 w-6 text-white" />
             </div>

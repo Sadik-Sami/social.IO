@@ -148,9 +148,5 @@ export async function searchProfiles(query: string, requestingUserId: string): P
 		)
 		.limit(20);
 
-	if (profiles.length === 0) {
-		throw new HTTPException(404, { message: 'No profiles found' });
-	}
-
 	return profiles;
 }

@@ -42,6 +42,8 @@ export const messageResponseSchema = z.object({
 	deletedAt: z.string().nullable(),
 	createdAt: z.string(),
 	senderDisplayName: z.string().nullable().optional(),
+	deliveredCount: z.number().default(0),
+	seenCount: z.number().default(0),
 });
 
 //  Conversation
@@ -57,6 +59,13 @@ export const conversationResponseSchema = z.object({
 });
 
 export const conversationListItemSchema = conversationResponseSchema.extend({
+	participants: z.array(
+		z.object({
+			userId: z.string(),
+			displayName: z.string().nullable(),
+			avatarUrl: z.string().nullable(),
+		}),
+	),
 	lastMessage: z
 		.object({
 			id: z.string(),

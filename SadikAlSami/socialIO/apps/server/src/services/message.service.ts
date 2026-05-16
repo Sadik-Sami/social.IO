@@ -9,8 +9,8 @@ import {
 	type EditMessageBody,
 } from '@/validators';
 import { db } from '@socialIO/db';
-import { conversation, message, messageEditHistory, participant } from '@socialIO/db/schema';
-import { and, count, desc, eq, isNull, lt, max, ne } from 'drizzle-orm';
+import { conversation, message, messageEditHistory, participant, userProfile } from '@socialIO/db/schema';
+import { and, count, desc, eq, inArray, isNull, lt, max, ne } from 'drizzle-orm';
 import { HTTPException } from 'hono/http-exception';
 import {
 	cacheAddMessage,
@@ -116,8 +116,15 @@ export async function sendMessage(
 	});
 	// Transaction Commited
 
-	// 4. Decrypt once to build the public shape
-	const formatted = formatMessage(saved);
+	// 4. Fetch sender's display name for the response
+	const [senderProfile] = await db
+		.select({ displayName: userProfile.displayName })
+		.from(userProfile)
+		.where(eq(userProfile.id, senderId))
+		.limit(1);
+
+	// 5. Decrypt once to build the public shape
+	const formatted = formatMessage({ ...saved, senderDisplayName: senderProfile?.displayName ?? null });
 
 	// 5. Populate Redis cache with plaintext JSON
 	try {
@@ -125,12 +132,8 @@ export async function sendMessage(
 	} catch {
 		console.warn('Failed to update cache for new message', { conversationId: conversationId, messageId: formatted.id });
 	}
-	// 6. Create delivered statuses for all other participants (fire and forget)
-	await createDeliveredStatuses(conversationId, formatted.id, senderId).catch((err) => {
-		console.error('[message] Failed to create delivered statuses:', err);
-	});
 
-	// 7. Publish to WebSocket subscribers about the new message and conversation update
+	// 6. Publish new_message FIRST so the frontend cache has the message before delivered events arrive
 	try {
 		await publish(conversationId, {
 			type: 'new_message',
@@ -144,9 +147,16 @@ export async function sendMessage(
 			updatedAt: new Date().toISOString(),
 		});
 	} catch {
-		// Cache update failure should not block the main flow, so we catch and log it without throwing
 		console.warn('Failed to publish new message to Redis', { conversationId: conversationId, messageId: formatted.id });
 	}
+
+	// 7. Create delivered statuses AFTER new_message is published (fire and forget)
+	//    This ensures the frontend cache has the message before delivered WS events increment the count
+	setImmediate(() => {
+		createDeliveredStatuses(conversationId, formatted.id, senderId).catch((err) => {
+			console.error('[message] Failed to create delivered statuses:', err);
+		});
+	});
 
 	return formatted;
 }
@@ -175,13 +185,60 @@ export async function getMessages(
 		}
 	}
 	const rows = await db
-		.select()
+		.select({
+			id: message.id,
+			conversationId: message.conversationId,
+			senderId: message.senderId,
+			sequenceNumber: message.sequenceNumber,
+			contentEnc: message.contentEnc,
+			contentIv: message.contentIv,
+			type: message.type,
+			imageUrl: message.imageUrl,
+			replyToId: message.replyToId,
+			isEdited: message.isEdited,
+			editedAt: message.editedAt,
+			isDeleted: message.isDeleted,
+			deletedAt: message.deletedAt,
+			createdAt: message.createdAt,
+			senderDisplayName: userProfile.displayName,
+		})
 		.from(message)
+		.leftJoin(userProfile, eq(message.senderId, userProfile.id))
 		.where(and(eq(message.conversationId, conversationId), cursor ? lt(message.sequenceNumber, cursor) : undefined))
 		.orderBy(desc(message.sequenceNumber))
 		.limit(limit);
 
 	const formatted = rows.map(formatMessage);
+
+	// Batch-fetch delivered/seen counts for all messages in a single query (no N+1)
+	if (formatted.length > 0) {
+		const messageIds = formatted.map((m) => m.id);
+		const statusRows = await db
+			.select({ messageId: messageStatus.messageId, status: messageStatus.status, cnt: count() })
+			.from(messageStatus)
+			.where(inArray(messageStatus.messageId, messageIds))
+			.groupBy(messageStatus.messageId, messageStatus.status);
+
+		// Group by messageId → { deliveredCount, seenCount }
+		const statusMap = new Map<string, { deliveredCount: number; seenCount: number }>();
+		for (const row of statusRows) {
+			if (!statusMap.has(row.messageId)) {
+				statusMap.set(row.messageId, { deliveredCount: 0, seenCount: 0 });
+			}
+			const entry = statusMap.get(row.messageId)!;
+			if (row.status === 'delivered') entry.deliveredCount = row.cnt;
+			if (row.status === 'seen') entry.seenCount = row.cnt;
+		}
+
+		// Attach counts to each formatted message
+		for (const msg of formatted) {
+			const counts = statusMap.get(msg.id);
+			if (counts) {
+				msg.deliveredCount = counts.deliveredCount;
+				msg.seenCount = counts.seenCount;
+			}
+		}
+	}
 
 	// Populating Redis cache for first page load (when cursor is not provided) to optimize subsequent requests
 	if (!cursor && formatted.length > 0) {
@@ -377,6 +434,24 @@ export async function createDeliveredStatuses(
 			updatedAt: new Date(),
 		})),
 	);
+
+	// Broadcast delivered status to the conversation so the sender's UI updates in real time
+	try {
+		for (const p of participants) {
+			await publish(conversationId, {
+				type: 'message_status_update',
+				conversationId,
+				messageId,
+				userId: p.userId,
+				status: 'delivered',
+			});
+		}
+	} catch {
+		console.warn('[createDeliveredStatuses] Failed to publish delivered status to Redis', {
+			conversationId,
+			messageId,
+		});
+	}
 }
 
 /**
@@ -450,4 +525,28 @@ export async function getMessageStatusCounts(messageId: string): Promise<{
 		seenCount: seen,
 		totalParticipants: totalParticipants[0]?.count ?? 0,
 	};
+}
+
+/**
+ * @desc Bulk-upsert 'seen' status for all messages in a conversation the user didn't send.
+ * Used as REST fallback when the WS message_seen event cannot fire (e.g. WS reconnecting).
+ * Fire-and-forget — callers should not await this.
+ */
+export async function markConversationSeen(conversationId: string, userId: string): Promise<void> {
+	// Get IDs of all non-deleted messages in the conversation not sent by this user
+	const rows = await db
+		.select({ id: message.id })
+		.from(message)
+		.where(and(eq(message.conversationId, conversationId), ne(message.senderId, userId), eq(message.isDeleted, false)));
+
+	if (rows.length === 0) return;
+
+	const now = new Date();
+	await db
+		.insert(messageStatus)
+		.values(rows.map((r) => ({ messageId: r.id, userId, status: 'seen' as const, updatedAt: now })))
+		.onConflictDoUpdate({
+			target: [messageStatus.messageId, messageStatus.userId],
+			set: { status: 'seen', updatedAt: now },
+		});
 }

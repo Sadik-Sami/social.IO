@@ -111,8 +111,33 @@ export function WSProvider({ children }: { children: React.ReactNode }) {
         }
 
         case "message_status_update": {
-          // Invalidate the specific message's status query (for read receipt tooltip)
-          queryClient.invalidateQueries({ queryKey: messageKeys.status(event.messageId) });
+          queryClient.setQueryData<InfiniteData<MessagePage>>(
+            messageKeys.list(event.conversationId),
+            (old) => {
+              if (!old) return old;
+              const newPages = [...old.pages];
+              for (let i = 0; i < newPages.length; i++) {
+                const idx = newPages[i].messages.findIndex((m) => m.id === event.messageId);
+                if (idx !== -1) {
+                  const msg = newPages[i].messages[idx];
+                  newPages[i] = {
+                    ...newPages[i],
+                    messages: [
+                      ...newPages[i].messages.slice(0, idx),
+                      {
+                        ...msg,
+                        deliveredCount: event.status === "delivered" ? (msg.deliveredCount || 0) + 1 : msg.deliveredCount,
+                        seenCount: event.status === "seen" ? (msg.seenCount || 0) + 1 : msg.seenCount,
+                      },
+                      ...newPages[i].messages.slice(idx + 1),
+                    ],
+                  };
+                  return { ...old, pages: newPages };
+                }
+              }
+              return old;
+            },
+          );
           break;
         }
 

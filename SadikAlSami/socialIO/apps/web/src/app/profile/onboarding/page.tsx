@@ -13,7 +13,7 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (!isLoading && data?.exists) {
-      router.push("/dashboard");
+      router.push("/chat");
     }
   }, [isLoading, data, router]);
 

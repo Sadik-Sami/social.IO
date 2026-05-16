@@ -21,6 +21,9 @@ export async function cacheAddMessage(
 	const pipeline = redis.pipeline();
 
 	// Add the new message to the sorted set with the sequence number as the score
+	// First remove any existing message with the same sequence number to prevent duplicates
+	// (Since ZADD uniqueness is based on the string itself, an updated message would create a duplicate)
+	pipeline.zremrangebyscore(key, sequenceNumber, sequenceNumber);
 	pipeline.zadd(key, sequenceNumber, messageJson);
 	pipeline.zremrangebyrank(key, 0, -51);
 	pipeline.expire(key, RedisTTL.messageCache);
@@ -39,9 +42,7 @@ export async function cacheAddMessage(
  */
 export async function cacheGetMessages(conversationId: string, limit: number): Promise<string[] | null> {
 	const key = RedisKeys.messageCache(conversationId);
-	// Retrieve messages in reverse order (newest first) up to the specified limit
 	const cached = await redis.zrevrangebyscore(key, '+inf', '-inf', 'LIMIT', 0, limit);
-	// Only return if we have a full page; otherwise treat as cache miss
 	return cached.length === limit ? cached : null;
 }
 
@@ -90,6 +91,7 @@ export async function cacheBulkAddMessages(
 	const pipeline = redis.pipeline();
 
 	messages.forEach(({ sequenceNumber, messageJson }) => {
+		pipeline.zremrangebyscore(key, sequenceNumber, sequenceNumber);
 		pipeline.zadd(key, sequenceNumber, messageJson);
 	});
 
@@ -204,6 +206,7 @@ export async function typingClear(conversationId: string, userId: string): Promi
  *
  * @returns A promise that resolves to an array of user IDs who are currently typing in the specified conversation. If no users are typing, it returns an empty array.
  */
+
 // TODO: Avoid SCAN for Typing Indicators Later (becomes inefficient because Redis still scans globally.)
 /**
 * A more scalable architecture:

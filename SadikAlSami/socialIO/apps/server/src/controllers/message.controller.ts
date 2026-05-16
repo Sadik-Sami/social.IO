@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { type AppEnv } from '@/types/app-env';
 import { HTTPException } from 'hono/http-exception';
-import { sendMessage, getMessages, editMessage, softDeleteMessage, getMessageStatusCounts } from '@/services';
+import { sendMessage, getMessages, editMessage, softDeleteMessage, getMessageStatusCounts, markConversationSeen } from '@/services';
 import { isAuthenticated, validate, isMember } from '@/middlewares';
 import {
 	conversationIdParamSchema,
@@ -39,6 +39,12 @@ messageController.get(
 		const { cursor, limit } = c.req.valid('query');
 
 		const messages = await getMessages(conversationId, cursor, limit);
+
+		// REST fallback: mark all messages in this conversation as seen for this user.
+		// Runs fire-and-forget so it never blocks the response.
+		markConversationSeen(conversationId, userId).catch(() => {
+			// Non-critical — WS path handles real-time seen updates
+		});
 
 		return c.json({
 			success: true,

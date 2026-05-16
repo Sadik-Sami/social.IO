@@ -90,7 +90,7 @@ export type MessageStatusUpdateEvent = {
 	conversationId: string;
 	messageId: string;
 	userId: string;
-	status: 'seen';
+	status: 'delivered' | 'seen';
 };
 
 export type ConversationUpdatedEvent = {

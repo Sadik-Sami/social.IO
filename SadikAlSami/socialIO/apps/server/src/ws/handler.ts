@@ -3,7 +3,7 @@ import type { WSContext } from 'hono/ws';
 import type { AppEnv } from '@/types/app-env';
 import { auth } from '@socialIO/auth';
 import { db } from '@socialIO/db';
-import { messageStatus, participant } from '@socialIO/db/schema';
+import { messageStatus, message, participant } from '@socialIO/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
 
 import { upgradeWebSocket } from '@hono/node-server';
@@ -118,6 +118,15 @@ async function handleEvent(event: InboundEvent, userId: string, ws: WSContext, t
 
 		case 'message_seen': {
 			const { conversationId, messageId } = event.payload;
+
+			// Never count the sender's own view as "seen"
+			const [msgRow] = await db
+				.select({ senderId: message.senderId })
+				.from(message)
+				.where(eq(message.id, messageId))
+				.limit(1);
+			if (!msgRow || msgRow.senderId === userId) break;
+
 			await db
 				.insert(messageStatus)
 				.values({ messageId, userId, status: 'seen', updatedAt: new Date() })

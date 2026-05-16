@@ -42,7 +42,7 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
       },
       {
         onSuccess: () => {
-          router.push("/dashboard");
+          router.push("/chat");
           toast.success("Welcome back!");
         },
         onError: (error) => {

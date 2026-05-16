@@ -1,4 +1,4 @@
-import { db } from '@socialIO/db';
+import { db, type TX } from '@socialIO/db';
 import { conversation, message, participant, userProfile } from '@socialIO/db/schema';
 import {
 	conversationDetailResponseSchema,
@@ -20,8 +20,11 @@ import { getUnreadCounts } from './message.service';
  * @param conversationId
  * @returns
  */
-export async function getConversationById(conversationId: string): Promise<ConversationDetailResponse> {
-	const [conv] = await db
+export async function getConversationById(
+	conversationId: string,
+	txClient: TX = db,
+): Promise<ConversationDetailResponse> {
+	const [conv] = await txClient
 		.select({
 			id: conversation.id,
 			type: conversation.type,
@@ -41,7 +44,7 @@ export async function getConversationById(conversationId: string): Promise<Conve
 		});
 	}
 
-	const participants = await db
+	const participants = await txClient
 		.select({
 			id: participant.id,
 			userId: participant.userId,
@@ -61,6 +64,7 @@ export async function getConversationById(conversationId: string): Promise<Conve
 		participants,
 	});
 }
+
 /**
  * @desc Get a participant in a conversation
  * @param conversationId
@@ -127,7 +131,7 @@ export async function findOrCreateDM(userAId: string, userBId: string): Promise<
 			},
 		]);
 
-		return getConversationById(conversationId);
+		return getConversationById(conversationId, tx);
 	});
 }
 
@@ -168,7 +172,7 @@ export async function createGroup(body: CreateGroupBody, creatorId: string): Pro
 			}),
 		);
 
-		return getConversationById(conversationId);
+		return getConversationById(conversationId, tx);
 	});
 }
 
@@ -185,16 +189,18 @@ export async function getUserConversations(userId: string): Promise<Conversation
 				type: conversation.type,
 				name: conversation.name,
 				avatarUrl: conversation.avatarUrl,
+				createdAt: conversation.createdAt,
 				updatedAt: conversation.updatedAt,
+				lastMessageId: conversation.lastMessageId,
 
-				lastMessageId: message.id,
-				lastMessageContentEnc: message.contentEnc,
-				lastMessageContentIv: message.contentIv,
-				lastMessageType: message.type,
-				lastMessageIsDeleted: message.isDeleted,
-				lastMessageCreatedAt: message.createdAt,
-				lastMessageSenderId: message.senderId,
-				lastMessageSenderName: userProfile.displayName,
+				msgId: message.id,
+				msgContentEnc: message.contentEnc,
+				msgContentIv: message.contentIv,
+				msgType: message.type,
+				msgIsDeleted: message.isDeleted,
+				msgCreatedAt: message.createdAt,
+				msgSenderId: message.senderId,
+				msgSenderName: userProfile.displayName,
 			})
 			.from(participant)
 			.innerJoin(conversation, eq(participant.conversationId, conversation.id))
@@ -205,25 +211,48 @@ export async function getUserConversations(userId: string): Promise<Conversation
 		getUnreadCounts(userId),
 	]);
 
+	if (rows.length === 0) return [];
+
+	// Batch-fetching participants for all conversations in one query
+	const convIds = rows.map((r) => r.id);
+	const allParticipants = await db
+		.select({
+			conversationId: participant.conversationId,
+			userId: participant.userId,
+			displayName: userProfile.displayName,
+			avatarUrl: userProfile.avatarUrl,
+		})
+		.from(participant)
+		.leftJoin(userProfile, eq(participant.userId, userProfile.id))
+		.where(and(inArray(participant.conversationId, convIds), isNull(participant.leftAt)));
+
+	// Group participants by conversationId
+	const participantMap = new Map<string, { userId: string; displayName: string | null; avatarUrl: string | null }[]>();
+	for (const p of allParticipants) {
+		const list = participantMap.get(p.conversationId) ?? [];
+		list.push({ userId: p.userId, displayName: p.displayName, avatarUrl: p.avatarUrl });
+		participantMap.set(p.conversationId, list);
+	}
+
 	return rows.map((row) => {
 		const lastMessage =
-			row.lastMessageId != null ?
+			row.msgId != null ?
 				{
-					id: row.lastMessageId,
+					id: row.msgId,
 
 					content:
-						row.lastMessageIsDeleted ? null : (
+						row.msgIsDeleted ? null : (
 							decrypt({
-								content_enc: row.lastMessageContentEnc!,
-								content_iv: row.lastMessageContentIv!,
+								content_enc: row.msgContentEnc!,
+								content_iv: row.msgContentIv!,
 							})
 						),
 
-					type: row.lastMessageType!,
-					isDeleted: row.lastMessageIsDeleted!,
-					createdAt: row.lastMessageCreatedAt!,
-					senderId: row.lastMessageSenderId!,
-					senderName: row.lastMessageSenderName ?? null,
+					type: row.msgType,
+					isDeleted: row.msgIsDeleted,
+					createdAt: row.msgCreatedAt,
+					senderId: row.msgSenderId,
+					senderName: row.msgSenderName,
 				}
 			:	null;
 
@@ -232,7 +261,10 @@ export async function getUserConversations(userId: string): Promise<Conversation
 			type: row.type,
 			name: row.name,
 			avatarUrl: row.avatarUrl,
+			createdAt: row.createdAt,
 			updatedAt: row.updatedAt,
+			lastMessageId: row.lastMessageId,
+			participants: participantMap.get(row.id) ?? [],
 			lastMessage,
 			unreadCount: unreadMap[row.id] ?? 0,
 		});
