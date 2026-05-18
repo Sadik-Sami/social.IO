@@ -61,7 +61,7 @@ export function WSProvider({ children }: { children: React.ReactNode }) {
     (event: InboundEvent) => {
       switch (event.type) {
         case "new_message": {
-          const { conversationId, message } = event;
+          const { conversationId, message, tempId } = event;
 
           queryClient.setQueryData<InfiniteData<MessagePage>>(
             messageKeys.list(conversationId),
@@ -83,8 +83,22 @@ export function WSProvider({ children }: { children: React.ReactNode }) {
                 }
               }
 
-              // New message — prepend to first page
               const newPages = [...old.pages];
+
+              // If tempId exists, replace the optimistic message
+              if (tempId) {
+                for (let i = 0; i < newPages.length; i++) {
+                  const tempIdx = newPages[i].messages.findIndex((m) => m.id === tempId);
+                  if (tempIdx !== -1) {
+                    const newMessages = [...newPages[i].messages];
+                    newMessages[tempIdx] = message;
+                    newPages[i] = { ...newPages[i], messages: newMessages };
+                    return { ...old, pages: newPages };
+                  }
+                }
+              }
+
+              // New message (no tempId match) — prepend to first page
               newPages[0] = {
                 ...newPages[0],
                 messages: [message, ...newPages[0].messages],

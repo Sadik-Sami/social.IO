@@ -67,6 +67,7 @@ export type NewMessageEvent = {
 	type: 'new_message';
 	conversationId: string;
 	message: MessageResponse;
+	tempId?: string;
 };
 
 export type JoinedEvent = {

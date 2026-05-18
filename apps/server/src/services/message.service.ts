@@ -129,7 +129,12 @@ export async function sendMessage(
 		.where(and(eq(participant.conversationId, conversationId), eq(participant.userId, senderId)));
 
 	try {
-		await publish(conversationId, { type: 'new_message', conversationId, message: formatted });
+		await publish(conversationId, { 
+			type: 'new_message', 
+			conversationId, 
+			message: formatted,
+			tempId: body.tempId 
+		});
 
 		await publish(conversationId, {
 			type: 'conversation_status_update',

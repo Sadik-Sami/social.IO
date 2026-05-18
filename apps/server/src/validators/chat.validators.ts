@@ -119,6 +119,7 @@ export const createMessageBodySchema = messageInsertSchema
 	.extend({
 		type: messageTypeInputSchema,
 		content: z.string().min(MESSAGE_CONTENT_MIN).max(MESSAGE_CONTENT_MAX),
+		tempId: z.string().optional(),
 	})
 	.superRefine((data, ctx) => {
 		if (data.type === 'image' && !data.imageUrl) {

@@ -13,15 +13,16 @@ export function useSendMessage() {
 	const qc = useQueryClient();
 
 	return useMutation({
-		mutationFn: ({ conversationId, content }: { conversationId: string; content: string }) =>
-			api.post(`/api/conversations/${conversationId}/messages`, { content, type: 'text' }),
+		mutationFn: (variables: { conversationId: string; content: string; tempId?: string }) =>
+			api.post(`/api/conversations/${variables.conversationId}/messages`, { content: variables.content, type: 'text', tempId: variables.tempId }),
 
-		onMutate: async ({ conversationId, content }) => {
+		onMutate: async (variables) => {
+			const { conversationId, content } = variables;
 			await qc.cancelQueries({ queryKey: messageKeys.list(conversationId) });
 
-			const previous = qc.getQueryData<InfiniteData<MessagePage>>(messageKeys.list(conversationId));
+			const tempId = variables.tempId || `temp-${Date.now()}`;
+			variables.tempId = tempId; // attach it so mutationFn can use it
 
-			const tempId = `temp-${Date.now()}`;
 			const optimistic: MessageResponse = {
 				id: tempId,
 				conversationId,
@@ -48,7 +49,7 @@ export function useSendMessage() {
 				return { ...old, pages: newPages };
 			});
 
-			return { previous, tempId };
+			return { tempId };
 		},
 
 		onSuccess: (res, variables, context) => {
@@ -60,29 +61,14 @@ export function useSendMessage() {
 				if (!old) return old;
 				const newPages = [...old.pages];
 
-				// Check if WS already inserted the real message
-				let hasRealMessage = false;
-				for (const page of newPages) {
-					if (page.messages.some((m) => m.id === realMessage.id)) {
-						hasRealMessage = true;
-						break;
-					}
-				}
-
-				// Find and replace/remove the temp message
+				// Find and replace the temp message
 				for (let i = 0; i < newPages.length; i++) {
 					const tempIdx = newPages[i].messages.findIndex((m) => m.id === tempId);
 					if (tempIdx !== -1) {
 						const newMessages = [...newPages[i].messages];
-						if (hasRealMessage) {
-							// Remove temp, real is already there
-							newMessages.splice(tempIdx, 1);
-						} else {
-							// Replace temp with real
-							newMessages[tempIdx] = realMessage;
-							hasRealMessage = true;
-						}
+						newMessages[tempIdx] = realMessage;
 						newPages[i] = { ...newPages[i], messages: newMessages };
+						return { ...old, pages: newPages };
 					}
 				}
 
@@ -90,9 +76,17 @@ export function useSendMessage() {
 			});
 		},
 
-		onError: (_err, { conversationId }, context) => {
-			if (context?.previous) {
-				qc.setQueryData(messageKeys.list(conversationId), context.previous);
+		onError: (_err, variables, context) => {
+			if (context?.tempId) {
+				qc.setQueryData<InfiniteData<MessagePage>>(messageKeys.list(variables.conversationId), (old) => {
+					if (!old) return old;
+					const newPages = [...old.pages];
+					newPages[0] = {
+						...newPages[0],
+						messages: newPages[0].messages.filter((m) => m.id !== context.tempId),
+					};
+					return { ...old, pages: newPages };
+				});
 			}
 		},
 

@@ -43,6 +43,7 @@ export const inboundEventSchema = z.discriminatedUnion('type', [
 		type: z.literal('new_message'),
 		conversationId: z.string(),
 		message: messageResponseSchema,
+		tempId: z.string().optional(),
 	}),
 	z.object({
 		type: z.literal('typing_update'),
