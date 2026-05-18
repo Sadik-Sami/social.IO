@@ -72,10 +72,10 @@ export function MessageBubble({
 
 					{/* Bubble */}
 					<div
-						className={`rounded-2xl px-3.5 py-2 ${
+						className={`rounded-[20px] px-3.5 py-2 ${
 							isOwn
-								? "rounded-br-sm bg-primary text-primary-foreground"
-								: "rounded-bl-sm bg-card text-foreground ring-1 ring-border"
+								? "rounded-br-sm bg-primary text-primary-foreground shadow-sm"
+								: "rounded-bl-sm bg-card text-foreground ring-1 ring-border shadow-xs"
 						} ${isOptimistic ? "opacity-70" : ""}`}
 					>
 						{message.type === "image" && message.imageUrl ? (
@@ -150,21 +150,21 @@ function StatusTick({ message, conversationId }: { message: MessageResponse; con
 		.map(([, p]) => p);
 
 	if (otherProgress.length === 0) {
-		return <Check className="h-3.5 w-3.5 text-gray-500" />;
+		return <Check className="h-3.5 w-3.5 text-muted-foreground" />;
 	}
 
 	// Seen: at least one other participant's lastSeenSequence >= this message's sequence
 	const seenByAny = otherProgress.some((p) => p.lastSeenSequence >= message.sequenceNumber);
 	if (seenByAny) {
-		return <CheckCheck className="h-3.5 w-3.5 text-green-500" />;
+		return <CheckCheck className="h-3.5 w-3.5 text-secondary" />;
 	}
 
 	// Delivered: at least one other participant's lastDeliveredSequence >= this message's sequence
 	const deliveredToAny = otherProgress.some((p) => p.lastDeliveredSequence >= message.sequenceNumber);
 	if (deliveredToAny) {
-		return <CheckCheck className="h-3.5 w-3.5 text-gray-500" />;
+		return <CheckCheck className="h-3.5 w-3.5 text-muted-foreground" />;
 	}
 
 	// Sent: no delivery confirmation yet
-	return <Check className="h-3.5 w-3.5 text-gray-500" />;
+	return <Check className="h-3.5 w-3.5 text-muted-foreground" />;
 }

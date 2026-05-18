@@ -18,8 +18,8 @@ export function ProfileGuard({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-[#F9F9F8] dark:bg-[#1C1C1E]">
-        <Loader2 className="h-8 w-8 animate-spin text-[#E07A5F]" />
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }

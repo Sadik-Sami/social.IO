@@ -21,7 +21,7 @@ export function NewChatFab() {
 					whileHover={{ scale: 1.05 }}
 					whileTap={{ scale: 0.95 }}
 					onClick={() => setIsModalOpen(true)}
-					className="ml-auto flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-[#E07A5F] text-white shadow-lg transition-colors duration-200 hover:bg-[#c96c53] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E07A5F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#F9F9F8] dark:focus-visible:ring-offset-[#1C1C1E]"
+					className="ml-auto flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-colors duration-200 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
 					aria-label="New conversation"
 				>
 					<Plus className="h-5 w-5" />

@@ -90,7 +90,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 	 */
 	useEffect(() => {
 		if (!currentUserId || allMessages.length === 0) return;
-		
+
 		// Find the maximum sequence number among all messages
 		let maxSequence = 0;
 		for (const msg of allMessages) {
@@ -107,7 +107,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 				});
 			} else {
 				// REST fallback when WS is reconnecting
-				api.patch(`/api/conversations/${conversationId}/seen`, { lastSeenSequence: maxSequence }).catch(() => {});
+				api.patch(`/api/conversations/${conversationId}/seen`, { lastSeenSequence: maxSequence }).catch(() => { });
 			}
 		}
 	}, [conversationId, allMessages.length, currentUserId, send, isConnected]);
@@ -144,7 +144,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 
 	// Resolve display name for the conversation header
 	const headerName = getHeaderName(detail, currentUserId);
-	const headerAvatar = detail?.avatarUrl ?? null;
+	const headerAvatar = detail?.participants.find((p) => p.userId !== currentUserId)?.avatarUrl ?? null;
 
 	// Filter out current user from typing users
 	const otherTypingUsers = typingUsers.filter((id) => id !== currentUserId);
@@ -152,7 +152,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 	return (
 		<div className="flex flex-1 flex-col min-h-0 bg-background">
 			{/* Conversation header */}
-			<div className="flex items-center gap-3 border-b border-border bg-background px-4 py-3 shrink-0">
+			<div className="flex items-center gap-3 border-b border-border bg-background drop-shadow-xs px-4 py-6 shrink-0">
 				{/* Mobile back button */}
 				<button
 					onClick={() => setActiveConversation(null)}
@@ -162,22 +162,24 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 					<ArrowLeft className="h-5 w-5 text-foreground" />
 				</button>
 
-				<Avatar className="h-9 w-9">
-					<AvatarImage src={headerAvatar ?? undefined} alt={headerName} />
-					<AvatarFallback className="bg-primary/15 text-primary text-xs font-semibold">
-						{headerName.substring(0, 2).toUpperCase()}
-					</AvatarFallback>
-				</Avatar>
+				<div className="flex items-center gap-2">
+					<Avatar className="h-9 w-9">
+						<AvatarImage src={headerAvatar ?? undefined} alt={headerName} />
+						<AvatarFallback className="bg-primary/15 text-primary text-xs font-semibold">
+							{headerName.substring(0, 2).toUpperCase()}
+						</AvatarFallback>
+					</Avatar>
 
-				<div className="flex flex-col min-w-0">
-					<span className="truncate text-sm font-semibold text-foreground">
-						{headerName}
-					</span>
-					{detail?.type === "group" && detail.participants && (
-						<span className="truncate text-xs text-muted-foreground">
-							{detail.participants.length} members
+					<div className="flex flex-col min-w-0">
+						<span className="truncate text-sm font-semibold text-foreground">
+							{headerName}
 						</span>
-					)}
+						{detail?.type === "group" && detail.participants && (
+							<span className="truncate text-xs text-muted-foreground">
+								{detail.participants.length} members
+							</span>
+						)}
+					</div>
 				</div>
 			</div>
 

@@ -129,3 +129,6 @@ export type CreateProfileBody = {
 };
 
 export type EditMessageBody = { content: string };
+
+export type UpdateProfileBody = { displayName?: string; bio?: string };
+export type UpdateProfileAvatarBody = { avatarUrl: string };

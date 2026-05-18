@@ -88,7 +88,7 @@ export function UserSearchModal({
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogContent className="sm:max-w-md">
+			<DialogContent className="sm:max-w-md rounded-2xl">
 				<DialogHeader>
 					<DialogTitle className="text-foreground">
 						New Conversation

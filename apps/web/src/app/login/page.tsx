@@ -11,9 +11,9 @@ export default function LoginPage() {
   const [showSignIn, setShowSignIn] = useState(true);
 
   return (
-    <div className="flex min-h-screen w-full flex-col md:flex-row bg-[#F9F9F8] dark:bg-[#1C1C1E]">
+    <div className="flex min-h-screen w-full flex-col md:flex-row bg-background">
       {/* Left/Top Branding Panel */}
-      <div className="flex w-full flex-col justify-center bg-[#E07A5F] p-8 text-white md:w-1/2 lg:p-16">
+      <div className="flex w-full flex-col justify-center bg-primary p-8 text-primary-foreground md:w-1/2 lg:p-16">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -43,7 +43,7 @@ export default function LoginPage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
-                className="w-full rounded-3xl bg-white p-8 shadow-xl dark:bg-[#27272A] border border-[#E4E4E7] dark:border-[#3F3F46]"
+                className="w-full rounded-3xl bg-card p-8 shadow-xl border border-border"
               >
                 <SignInForm onSwitchToSignUp={() => setShowSignIn(false)} />
               </motion.div>
@@ -54,7 +54,7 @@ export default function LoginPage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
-                className="w-full rounded-3xl bg-white p-8 shadow-xl dark:bg-[#27272A] border border-[#E4E4E7] dark:border-[#3F3F46]"
+                className="w-full rounded-3xl bg-card p-8 shadow-xl border border-border"
               >
                 <SignUpForm onSwitchToSignIn={() => setShowSignIn(true)} />
               </motion.div>

@@ -109,7 +109,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
 	return (
 		<div className="shrink-0 px-4 py-3 bg-background">
 			{/* Pill container — subtle surface, no hard top border */}
-			<div className="flex items-end gap-2 rounded-2xl bg-muted/70 px-4 py-2.5 ring-1 ring-border/50 transition-shadow duration-150 focus-within:ring-primary/40 focus-within:ring-2">
+			<div className="flex items-end gap-2 rounded-[20px] bg-muted/70 px-4 py-2.5 ring-1 ring-border/50 shadow-(--shadow-soft) transition-shadow duration-200 focus-within:ring-primary/40 focus-within:ring-2">
 				<textarea
 					ref={textareaRef}
 					id="message-composer"
@@ -126,7 +126,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
 					onClick={handleSend}
 					disabled={!canSend}
 					aria-label="Send message"
-					className="mb-0.5 flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-primary text-primary-foreground transition-all duration-150 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+					className="mb-0.5 flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-primary text-primary-foreground transition-all duration-150 hover:bg-primary/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
 				>
 					<SendHorizontal className="h-4 w-4" />
 				</button>

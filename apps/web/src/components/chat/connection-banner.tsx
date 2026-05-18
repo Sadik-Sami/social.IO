@@ -28,8 +28,8 @@ export function ConnectionBanner() {
 					<div
 						className={`flex items-center justify-center gap-2 px-4 py-1.5 text-xs font-medium backdrop-blur-md ${
 							wsStatus === "connecting"
-								? "bg-[#F2CC8F]/30 text-[#92751D] dark:bg-[#F2CC8F]/15 dark:text-[#F2CC8F]"
-								: "bg-[#E63946]/15 text-[#E63946] dark:bg-[#E63946]/10"
+								? "bg-amber-500/15 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
+								: "bg-destructive/15 text-destructive dark:bg-destructive/10"
 						}`}
 					>
 						{wsStatus === "connecting" ? (

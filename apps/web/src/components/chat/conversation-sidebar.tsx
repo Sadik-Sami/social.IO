@@ -1,19 +1,26 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Search, MessageSquarePlus } from "lucide-react";
+import { Search, MessageSquarePlus, LogOut, Sun, Moon } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { useTheme } from "next-themes";
+import { useRouter } from "next/navigation";
 
 import { Skeleton } from "@socialIO/ui/components/skeleton";
 import { Input } from "@socialIO/ui/components/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@socialIO/ui/components/avatar";
 import { Badge } from "@socialIO/ui/components/badge";
+import { Button } from "@socialIO/ui/components/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@socialIO/ui/components/tooltip";
 
 import { useChatStore } from "@/stores/chat-store";
 import { useConversations } from "@/hooks/use-conversations";
 import { useUnreadCounts } from "@/hooks/use-unread-counts";
 import { useAuthStore } from "@/stores/auth-store";
+import { useProfile } from "@/hooks/use-profile";
+import { authClient } from "@/lib/auth-client";
 import { NewChatFab } from "./new-chat-fab";
+import { ProfileUpdateModal } from "./profile-update-modal";
 import type { ConversationListItem } from "@/types/api";
 
 function formatRelativeTime(dateStr: string): string {
@@ -73,8 +80,8 @@ export function ConversationSidebar() {
 	return (
 		<div className="flex h-full flex-col bg-background">
 			{/* Header */}
-			<div className="flex items-center justify-between border-b border-border px-4 py-3.5">
-				<h1 className="text-base font-semibold tracking-tight text-foreground">
+			<div className="flex items-center justify-between border-b border-border px-4 py-7 bg-primary">
+				<h1 className="text-xl font-bold tracking-tight text-white dark:text-foreground">
 					Messages
 				</h1>
 			</div>
@@ -89,7 +96,7 @@ export function ConversationSidebar() {
 						placeholder="Search conversations..."
 						value={searchFilter}
 						onChange={(e) => setSearchFilter(e.target.value)}
-						className="pl-8.5 h-9 border-border bg-muted/50 text-sm placeholder:text-muted-foreground focus-visible:ring-primary focus-visible:bg-card"
+						className="pl-8.5 h-9 rounded-xl border-border bg-muted/50 text-sm placeholder:text-muted-foreground focus-visible:ring-primary focus-visible:bg-card"
 					/>
 				</div>
 			</div>
@@ -118,6 +125,9 @@ export function ConversationSidebar() {
 
 			{/* FAB */}
 			<NewChatFab />
+
+			{/* Footer */}
+			<SidebarFooter />
 		</div>
 	);
 }
@@ -187,8 +197,8 @@ function ConversationItem({
 			exit={{ opacity: 0, y: -4 }}
 			transition={{ type: "spring", stiffness: 400, damping: 30 }}
 			onClick={onSelect}
-			className={`flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset ${
-				isActive ? "bg-primary/8 dark:bg-primary/10" : ""
+			className={`flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-all duration-200 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset ${
+				isActive ? "bg-primary/8 dark:bg-primary/10 shadow-[inset_3px_0_0_0_var(--color-primary)]" : ""
 			}`}
 		>
 			<Avatar className="size-11 shrink-0">
@@ -201,7 +211,7 @@ function ConversationItem({
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				{/* Name + timestamp row */}
 				<div className="flex items-center justify-between gap-2">
-					<span className="truncate text-sm font-semibold text-foreground">
+					<span className={`truncate text-sm text-foreground ${unreadCount > 0 ? "font-bold" : "font-medium"}`}>
 						{displayName}
 					</span>
 					<span className="shrink-0 text-[11px] text-muted-foreground">
@@ -218,12 +228,12 @@ function ConversationItem({
 								{senderPrefix}:
 							</span>
 						)}
-						<span className="truncate text-xs text-muted-foreground">
+						<span className={`truncate text-xs ${unreadCount > 0 ? "font-medium text-foreground/70" : "text-muted-foreground"}`}>
 							{preview}
 						</span>
 					</div>
 					{unreadCount > 0 && (
-						<Badge className="h-5 min-w-5 shrink-0 rounded-full bg-destructive px-1.5 text-[10px] font-bold text-white hover:bg-destructive">
+						<Badge className="h-5.5 min-w-5.5 shrink-0 rounded-full bg-destructive px-1.5 text-[11px] font-extrabold text-white shadow-sm hover:bg-destructive">
 							{unreadCount > 99 ? "99+" : unreadCount}
 						</Badge>
 					)}
@@ -266,3 +276,80 @@ function EmptySidebar({ hasConversations }: { hasConversations: boolean }) {
 		</div>
 	);
 }
+
+function SidebarFooter() {
+	const router = useRouter();
+	const { theme, setTheme } = useTheme();
+	const { data: profileData } = useProfile();
+	const profile = profileData?.profile;
+
+	const handleLogout = () => {
+		authClient.signOut({
+			fetchOptions: {
+				onSuccess: () => router.push("/"),
+			},
+		});
+	};
+
+	const toggleTheme = () => {
+		setTheme(theme === "dark" ? "light" : "dark");
+	};
+
+	return (
+		<div className="flex items-center justify-between border-t border-primary-foreground/15 bg-primary px-3 py-3.5">
+			{/* Left: Profile trigger */}
+			<ProfileUpdateModal>
+				<div className="flex cursor-pointer items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-white/10">
+					<Avatar className="size-10 ring-2 ring-white/70">
+						<AvatarImage src={profile?.avatarUrl ?? undefined} alt={profile?.displayName ?? "Profile"} />
+						<AvatarFallback className="bg-white/15 text-xs font-semibold text-primary-foreground">
+							{getInitials(profile?.displayName ?? "?")}
+						</AvatarFallback>
+					</Avatar>
+					<span className="max-w-[100px] truncate text-xs font-medium text-primary-foreground">
+						{profile?.displayName ?? "Profile"}
+					</span>
+				</div>
+			</ProfileUpdateModal>
+
+			{/* Right: Theme toggle + Logout */}
+			<div className="flex items-center gap-0.5">
+				<Tooltip>
+					<TooltipTrigger
+						render={
+							<Button
+								variant="ghost"
+								size="icon-sm"
+								className="text-primary-foreground/70 hover:bg-white/10 hover:text-primary-foreground"
+								onClick={toggleTheme}
+							/>
+						}
+					>
+						<Sun className="size-4 rotate-0 scale-100 transition-transform dark:-rotate-90 dark:scale-0" />
+						<Moon className="absolute size-4 rotate-90 scale-0 transition-transform dark:rotate-0 dark:scale-100" />
+						<span className="sr-only">Toggle theme</span>
+					</TooltipTrigger>
+					<TooltipContent side="top">Toggle theme</TooltipContent>
+				</Tooltip>
+
+				<Tooltip>
+					<TooltipTrigger
+						render={
+							<Button
+								variant="ghost"
+								size="icon-sm"
+								className="text-primary-foreground/70 hover:bg-white/10 hover:text-primary-foreground"
+								onClick={handleLogout}
+							/>
+						}
+					>
+						<LogOut className="size-4" />
+						<span className="sr-only">Sign out</span>
+					</TooltipTrigger>
+					<TooltipContent side="top">Sign out</TooltipContent>
+				</Tooltip>
+			</div>
+		</div>
+	);
+}
+

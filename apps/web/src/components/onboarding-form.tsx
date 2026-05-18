@@ -82,11 +82,11 @@ export default function OnboardingForm() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
-      className="w-full max-w-md rounded-3xl bg-white p-8 shadow-xl dark:bg-[#27272A] border border-[#E4E4E7] dark:border-[#3F3F46]"
+      className="w-full max-w-md rounded-3xl bg-card p-8 shadow-xl border border-border"
     >
       <div className="mb-8 text-center">
-        <h2 className="text-2xl font-bold text-[#27272A] dark:text-[#F4F4F5]">Set up your profile</h2>
-        <p className="mt-2 text-sm text-[#71717A] dark:text-[#A1A1AA]">
+        <h2 className="text-2xl font-bold text-foreground">Set up your profile</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
           Add a photo and some details to help friends find you.
         </p>
       </div>
@@ -95,12 +95,12 @@ export default function OnboardingForm() {
         <div className="flex flex-col items-center justify-center space-y-4">
           <Label
             htmlFor="avatar-upload"
-            className="group relative flex h-24 w-24 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-[#F4F4F5] dark:bg-[#3F3F46] hover:ring-2 hover:ring-[#E07A5F] hover:ring-offset-2 hover:ring-offset-white dark:hover:ring-offset-[#27272A] transition-all"
+            className="group relative flex h-24 w-24 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-muted hover:ring-2 hover:ring-primary hover:ring-offset-2 hover:ring-offset-background transition-all"
           >
             {avatarPreview ? (
               <img src={avatarPreview} alt="Avatar preview" className="h-full w-full object-cover" />
             ) : (
-              <span className="text-2xl font-semibold text-[#71717A] dark:text-[#A1A1AA]">
+              <span className="text-2xl font-semibold text-muted-foreground">
                 {getInitials(displayNameValue)}
               </span>
             )}
@@ -116,32 +116,32 @@ export default function OnboardingForm() {
             className="hidden"
             onChange={handleAvatarSelect}
           />
-          <p className="text-xs text-[#71717A] dark:text-[#A1A1AA]">
+          <p className="text-xs text-muted-foreground">
             Click to upload a profile picture
           </p>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="displayName" className="text-[#27272A] dark:text-[#F4F4F5]">Display Name</Label>
+          <Label htmlFor="displayName" className="text-foreground">Display Name</Label>
           <Input
             id="displayName"
             type="text"
             placeholder="How should we call you?"
-            className="border-[#E4E4E7] dark:border-[#3F3F46] focus-visible:ring-[#E07A5F]"
+            className="border-border focus-visible:ring-primary"
             {...register("displayName")}
           />
           {errors.displayName && (
-            <p className="text-xs text-[#E63946]">{errors.displayName.message}</p>
+            <p className="text-xs text-destructive">{errors.displayName.message}</p>
           )}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="bio" className="text-[#27272A] dark:text-[#F4F4F5]">Bio (Optional)</Label>
+          <Label htmlFor="bio" className="text-foreground">Bio (Optional)</Label>
           <Input
             id="bio"
             type="text"
             placeholder="A short bio about yourself"
-            className="border-[#E4E4E7] dark:border-[#3F3F46] focus-visible:ring-[#E07A5F]"
+            className="border-border focus-visible:ring-primary"
             {...register("bio")}
           />
         </div>
@@ -149,7 +149,7 @@ export default function OnboardingForm() {
         <Button
           type="submit"
           disabled={isSubmitting}
-          className="w-full bg-[#E07A5F] hover:bg-[#c96c53] text-white transition-colors duration-200"
+          className="w-full bg-primary hover:bg-primary/90 text-primary-foreground transition-colors duration-200"
         >
           {isSubmitting ? (
             <>

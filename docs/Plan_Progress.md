@@ -54,11 +54,11 @@ This document tracks the current execution state of the social.io platform, sepa
 - `GET /api/conversations`, `POST /api/conversations`, `GET /api/conversations/:id`
 - `GET /api/conversations/:id/messages`, `POST /api/conversations/:id/messages`
 - `PATCH /api/messages/:id`, `DELETE /api/messages/:id`
+- `POST /api/upload/sign`, `DELETE /api/upload/image`
 
 ### REST endpoints (Pending)
 - `POST /api/conversations/:id/members`, `DELETE /api/conversations/:id/members/:userId`, `PATCH /api/conversations/:id/members/me`
 - `POST /api/messages/:id/reactions`, `DELETE /api/messages/:id/reactions/:emoji`
-- `POST /api/upload/sign`, `DELETE /api/upload/image`
 
 ### Realtime events (Implemented)
 - **Client -> server:** `join_conversation`, `send_message`, `typing_start`, `typing_stop`, `conversation_seen`
@@ -142,8 +142,8 @@ This document tracks the current execution state of the social.io platform, sepa
 ### Day 6 - Upload + Edit + Cache Hardening
 - [x] Message edit path and cache invalidation
 - [x] Display `is_deleted` messages
-- [ ] Signed upload endpoint (`POST /api/upload/sign`)
-- [ ] Image delete endpoint (`DELETE /api/upload/image`)
+- [x] Signed upload endpoint (`POST /api/upload/sign`)
+- [x] Image delete endpoint (`DELETE /api/upload/image`)
 - [ ] Image message send path and UI
 
 ### Day 7 - Hardening + Deploy Readiness

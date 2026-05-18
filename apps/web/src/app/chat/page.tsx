@@ -23,7 +23,7 @@ export default function ChatPage() {
 			<div
 				className={`${
 					activeConversationId ? "hidden lg:flex" : "flex"
-				} w-full lg:w-[320px] shrink-0 flex-col border-r border-border`}
+				} w-full lg:w-[320px] shrink-0 flex-col border-r border-border/50 shadow-[1px_0_0_0_var(--color-border)]`}
 			>
 				<ConversationSidebar />
 			</div>

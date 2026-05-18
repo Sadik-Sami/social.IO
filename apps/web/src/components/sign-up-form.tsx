@@ -57,58 +57,58 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
 
   return (
     <div className="w-full">
-      <h2 className="mb-1 text-2xl font-bold text-[#27272A] dark:text-[#F4F4F5]">Create Account</h2>
-      <p className="mb-6 text-sm text-[#71717A] dark:text-[#A1A1AA]">
+      <h2 className="mb-1 text-2xl font-bold text-foreground">Create Account</h2>
+      <p className="mb-6 text-sm text-muted-foreground">
         Enter your details below to create your account.
       </p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="name" className="text-[#27272A] dark:text-[#F4F4F5]">Name</Label>
+          <Label htmlFor="name" className="text-foreground">Name</Label>
           <Input
             id="name"
             type="text"
             placeholder="John Doe"
-            className="border-[#E4E4E7] dark:border-[#3F3F46] focus-visible:ring-[#E07A5F]"
+            className="border-border focus-visible:ring-primary"
             {...register("name")}
           />
           {errors.name && (
-            <p className="text-xs text-[#E63946]">{errors.name.message}</p>
+            <p className="text-xs text-destructive">{errors.name.message}</p>
           )}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="email" className="text-[#27272A] dark:text-[#F4F4F5]">Email</Label>
+          <Label htmlFor="email" className="text-foreground">Email</Label>
           <Input
             id="email"
             type="email"
             placeholder="you@example.com"
-            className="border-[#E4E4E7] dark:border-[#3F3F46] focus-visible:ring-[#E07A5F]"
+            className="border-border focus-visible:ring-primary"
             {...register("email")}
           />
           {errors.email && (
-            <p className="text-xs text-[#E63946]">{errors.email.message}</p>
+            <p className="text-xs text-destructive">{errors.email.message}</p>
           )}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="password" className="text-[#27272A] dark:text-[#F4F4F5]">Password</Label>
+          <Label htmlFor="password" className="text-foreground">Password</Label>
           <Input
             id="password"
             type="password"
             placeholder="••••••••"
-            className="border-[#E4E4E7] dark:border-[#3F3F46] focus-visible:ring-[#E07A5F]"
+            className="border-border focus-visible:ring-primary"
             {...register("password")}
           />
           {errors.password && (
-            <p className="text-xs text-[#E63946]">{errors.password.message}</p>
+            <p className="text-xs text-destructive">{errors.password.message}</p>
           )}
         </div>
 
         <Button
           type="submit"
           disabled={isSubmitting}
-          className="w-full bg-[#E07A5F] hover:bg-[#c96c53] text-white transition-colors duration-200"
+          className="w-full bg-primary hover:bg-primary/90 text-primary-foreground transition-colors duration-200"
         >
           {isSubmitting ? (
             <>
@@ -122,11 +122,11 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
       </form>
 
       <div className="mt-6 text-center">
-        <p className="text-sm text-[#71717A] dark:text-[#A1A1AA]">
+        <p className="text-sm text-muted-foreground">
           Already have an account?{" "}
           <button
             onClick={onSwitchToSignIn}
-            className="font-medium text-[#E07A5F] hover:underline"
+            className="font-medium text-primary hover:underline"
           >
             Sign in
           </button>
