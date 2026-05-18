@@ -1,0 +1,164 @@
+import { Hono } from 'hono';
+import { type AppEnv } from '@/types/app-env';
+import { HTTPException } from 'hono/http-exception';
+import { sendMessage, getMessages, editMessage, softDeleteMessage, markConversationSeen } from '@/services';
+import { isAuthenticated, validate, isMember } from '@/middlewares';
+import {
+	conversationIdParamSchema,
+	createMessageBodySchema,
+	editMessageBodySchema,
+	messageIdParamSchema,
+	messageListQuerySchema,
+	markSeenBodySchema,
+} from '@/validators';
+
+export const messageController = new Hono<AppEnv>();
+
+/**
+ * @route GET /conversations/:id/messages
+ * @desc Get messages in a conversation with pagination
+ * @access Private (must be a member of the conversation)
+ * @param conversationId
+ * @param cursor
+ * @param limit
+ */
+messageController.get(
+	'/conversations/:id/messages',
+	isAuthenticated,
+	isMember,
+	validate('param', conversationIdParamSchema),
+	validate('query', messageListQuerySchema),
+	async (c) => {
+		const user = c.get('user');
+		const userId = user?.id;
+
+		if (!userId) {
+			throw new HTTPException(401, { message: 'Unauthorized' });
+		}
+
+		const { id: conversationId } = c.req.valid('param');
+		const { cursor, limit } = c.req.valid('query');
+
+		const messages = await getMessages(conversationId, cursor, limit);
+
+		return c.json({
+			success: true,
+			messages,
+			hasMore: messages.length === limit,
+		});
+	},
+);
+
+/**
+ * @route PATCH /conversations/:id/seen
+ * @desc REST fallback to mark a conversation seen up to a given sequence number.
+ *       Use this when the WebSocket conversation_seen event cannot fire (e.g. WS reconnecting).
+ * @access Private (must be a member of the conversation)
+ */
+messageController.patch(
+	'/conversations/:id/seen',
+	isAuthenticated,
+	isMember,
+	validate('param', conversationIdParamSchema),
+	validate('json', markSeenBodySchema),
+	async (c) => {
+		const user = c.get('user');
+		const userId = user?.id;
+		if (!userId) {
+			throw new HTTPException(401, { message: 'Unauthorized' });
+		}
+
+		const { id: conversationId } = c.req.valid('param');
+		const { lastSeenSequence } = c.req.valid('json');
+
+		await markConversationSeen(conversationId, userId, lastSeenSequence);
+		return c.json({ success: true });
+	},
+);
+
+/**
+ * @route POST /conversations/:id/messages
+ * @desc Send a message in a conversation
+ * @access Private (must be a member of the conversation)
+ * @param conversationId
+ * @param content
+ * @param type
+ * @param imageUrl (optional, required if type is 'image')
+ */
+messageController.post(
+	'/conversations/:id/messages',
+	isAuthenticated,
+	isMember,
+	validate('param', conversationIdParamSchema),
+	validate('json', createMessageBodySchema),
+	async (c) => {
+		const user = c.get('user');
+		const userId = user?.id;
+		if (!userId) {
+			throw new HTTPException(401, { message: 'Unauthorized' });
+		}
+
+		const { id: conversationId } = c.req.valid('param');
+		const messageBody = c.req.valid('json');
+
+		const message = await sendMessage(conversationId, userId, messageBody);
+		return c.json({ success: true, message }, 201);
+	},
+);
+
+/**
+ * @route PATCH /conversations/:id/messages/:msgId
+ * @desc Edit a message
+ * @access Private (only the sender can edit their message)
+ * @param conversationId
+ * @param msgId
+ * @param content
+ */
+messageController.patch(
+	'/conversations/:id/messages/:msgId',
+	isAuthenticated,
+	isMember,
+	validate('param', messageIdParamSchema),
+	validate('json', editMessageBodySchema),
+	async (c) => {
+		const user = c.get('user');
+		const userId = user?.id;
+		if (!userId) {
+			throw new HTTPException(401, { message: 'Unauthorized' });
+		}
+
+		const { msgId: messageId } = c.req.valid('param');
+		const messageBody = c.req.valid('json');
+
+		const updatedMessage = await editMessage(messageId, userId, messageBody);
+		return c.json({ success: true, message: updatedMessage });
+	},
+);
+
+/**
+ * @route DELETE /conversations/:id/messages/:msgId
+ * @desc Soft-delete a message
+ * @access Private (only the sender can delete their message)
+ * @param conversationId
+ * @param msgId
+ */
+messageController.delete(
+	'/conversations/:id/messages/:msgId',
+	isAuthenticated,
+	isMember,
+	validate('param', messageIdParamSchema),
+	async (c) => {
+		const user = c.get('user');
+		const userId = user?.id;
+		if (!userId) {
+			throw new HTTPException(401, { message: 'Unauthorized' });
+		}
+
+		const { msgId: messageId } = c.req.valid('param');
+
+		const deletedMessage = await softDeleteMessage(messageId, userId);
+		return c.json({ success: true, deletedMessage });
+	},
+);
+
+
