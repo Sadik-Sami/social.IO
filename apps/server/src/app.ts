@@ -6,7 +6,7 @@ import { auth } from '@socialIO/auth';
 import { env } from '@socialIO/env/server';
 
 import { errorHandler, notFound } from '@/middlewares';
-import { conversationController, messageController, profileController } from '@/controllers';
+import { conversationController, messageController, profileController, uploadController } from '@/controllers';
 
 import type { AppEnv } from '@/types/app-env';
 
@@ -29,6 +29,7 @@ app.get('/', (c) => c.text('SocialIO Server is running.'));
 app.route('/api/profile', profileController);
 app.route('/api/conversations', conversationController);
 app.route('/api', messageController);
+app.route('/api/upload', uploadController);
 
 app.notFound(notFound);
 app.onError(errorHandler);

@@ -17,6 +17,7 @@
     "@socialIO/env": "workspace:*",
     "@types/ws": "^8.18.1",
     "better-auth": "catalog:",
+    "cloudinary": "^2.10.0",
     "dotenv": "catalog:",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.18",
