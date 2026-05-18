@@ -430,6 +430,7 @@ export async function updateDeliveredOnConnect(userId: string): Promise<void> {
 		.from(participant)
 		.where(and(eq(participant.userId, userId), isNull(participant.leftAt)));
 
+
 	for (const row of participantRows) {
 		const [latest] = await db
 			.select({ maxSeq: max(message.sequenceNumber) })
@@ -469,15 +470,20 @@ export async function markConversationSeen(
 	lastSeenSequence: number,
 ): Promise<void> {
 	const [current] = await db
-		.select({ lastDeliveredSequence: participant.lastDeliveredSequence })
+		.select({ 
+			lastDeliveredSequence: participant.lastDeliveredSequence,
+			lastSeenSequence: participant.lastSeenSequence,
+		})
 		.from(participant)
 		.where(and(eq(participant.conversationId, conversationId), eq(participant.userId, userId)))
 		.limit(1);
 
 	if (!current) return;
 
-	// lastSeenSequence can never exceed lastDeliveredSequence
-	const clampedSeenSeq = Math.min(lastSeenSequence, current.lastDeliveredSequence);
+	// lastSeenSequence can never exceed lastDeliveredSequence AND it can never go backwards
+	const clampedSeenSeq = Math.max(current.lastSeenSequence, Math.min(lastSeenSequence, current.lastDeliveredSequence));
+
+	if (clampedSeenSeq === current.lastSeenSequence) return;
 
 	await db
 		.update(participant)

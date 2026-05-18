@@ -121,6 +121,13 @@ export function WSProvider({ children }: { children: React.ReactNode }) {
             event.lastDeliveredSequence,
             event.lastSeenSequence,
           );
+
+          // If this status update is for ME, my unread count might have changed!
+          const myUserId = useAuthStore.getState().session?.user?.id;
+          if (event.userId === myUserId) {
+            queryClient.invalidateQueries({ queryKey: conversationKeys.unread() });
+            queryClient.invalidateQueries({ queryKey: conversationKeys.list() });
+          }
           break;
         }
 
@@ -183,6 +190,9 @@ export function WSProvider({ children }: { children: React.ReactNode }) {
 
     ws.onopen = () => {
       setWsStatus("open");
+
+      // Invalidate all conversations to sync state missed while offline
+      queryClient.invalidateQueries({ queryKey: conversationKeys.all });
 
       // Start heartbeat
       heartbeatTimerRef.current = setInterval(() => {
