@@ -70,6 +70,28 @@ export const inboundEventSchema = z.discriminatedUnion('type', [
 		updatedAt: z.string(),
 	}),
 	z.object({
+		type: z.literal('member_added'),
+		conversationId: z.string(),
+		userId: z.string(),
+		role: z.enum(['admin', 'member']),
+		nickname: z.string().nullable(),
+		addedBy: z.string(),
+	}),
+	z.object({
+		type: z.literal('member_removed'),
+		conversationId: z.string(),
+		userId: z.string(),
+		removedBy: z.string(),
+	}),
+	z.object({
+		type: z.literal('reaction_update'),
+		conversationId: z.string(),
+		messageId: z.string(),
+		emoji: z.string(),
+		userId: z.string(),
+		action: z.enum(['added', 'removed']),
+	}),
+	z.object({
 		type: z.literal('joined'),
 		conversationId: z.string(),
 	}),

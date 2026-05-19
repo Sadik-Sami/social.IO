@@ -1,7 +1,7 @@
 import { auth } from '@socialIO/auth';
 import type { MiddlewareHandler } from 'hono';
 import type { AppEnv } from '../types/app-env';
-import { participant } from '@socialIO/db/schema/chat';
+import { conversation, participant } from '@socialIO/db/schema/chat';
 import { db } from '@socialIO/db';
 import { and, eq, isNull } from 'drizzle-orm';
 
@@ -65,6 +65,62 @@ export const isMember: MiddlewareHandler<AppEnv> = async (c, next) => {
 	// without making another DB query
 	// Usage: const role = c.get("participantRole") → "admin" | "member"
 	c.set('participantRole', membership.role);
+
+	await next();
+};
+
+export const requireGroupAdmin: MiddlewareHandler<AppEnv> = async (c, next) => {
+	const conversationId = c.req.param('id');
+	if (!conversationId) {
+		return c.json(
+			{
+				success: false,
+				message: 'Conversation ID is required',
+			},
+			400,
+		);
+	}
+
+	const role = c.get('participantRole');
+	if (!role) {
+		return c.json(unauthorizedResponse, 401);
+	}
+
+	const [conv] = await db
+		.select({ type: conversation.type })
+		.from(conversation)
+		.where(eq(conversation.id, conversationId))
+		.limit(1);
+
+	if (!conv) {
+		return c.json(
+			{
+				success: false,
+				message: 'Conversation not found',
+			},
+			404,
+		);
+	}
+
+	if (conv.type !== 'group') {
+		return c.json(
+			{
+				success: false,
+				message: 'Group-only operation',
+			},
+			400,
+		);
+	}
+
+	if (role !== 'admin') {
+		return c.json(
+			{
+				success: false,
+				message: 'Admin privileges required',
+			},
+			403,
+		);
+	}
 
 	await next();
 };

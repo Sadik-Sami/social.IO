@@ -23,6 +23,10 @@ export const conversationIdParamSchema = z.object({
 	id: z.string().min(1),
 });
 
+export const messageIdOnlyParamSchema = z.object({
+	id: z.string().min(1),
+});
+
 export const messageIdParamSchema = z.object({
 	id: z.string().min(1),
 	msgId: z.string().min(1),
@@ -32,7 +36,17 @@ export const memberUserIdParamSchema = z.object({
 	userId: z.string().min(1),
 });
 
+export const memberParamSchema = z.object({
+	id: z.string().min(1),
+	userId: z.string().min(1),
+});
+
 export const reactionEmojiParamSchema = z.object({
+	emoji: z.string().min(1).max(MESSAGE_REACTION_EMOJI_MAX),
+});
+
+export const reactionParamSchema = z.object({
+	id: z.string().min(1),
 	emoji: z.string().min(1).max(MESSAGE_REACTION_EMOJI_MAX),
 });
 

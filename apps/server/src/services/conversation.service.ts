@@ -6,14 +6,18 @@ import {
 	type ConversationDetailResponse,
 	type ConversationListItemResponse,
 	type ConversationResponse,
+	type AddMemberBody,
 	type CreateGroupBody,
+	type UpdateMemberBody,
 	type ParticipantResponse,
+	participantResponseSchema,
 } from '@/validators';
-import { and, count, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { HTTPException } from 'hono/http-exception';
 import { nanoid } from 'nanoid';
 import { decrypt } from '@socialIO/db/lib/crypto.lib';
 import { getUnreadCounts } from './message.service';
+import { publish, publishToUsers } from '@/ws/pubsub';
 
 /**
  * @desc Get conversation details by ID
@@ -271,4 +275,222 @@ export async function getUserConversations(userId: string): Promise<Conversation
 			unreadCount: unreadMap[row.id] ?? 0,
 		});
 	});
+}
+
+async function getActiveParticipantIds(conversationId: string): Promise<string[]> {
+	const rows = await db
+		.select({ userId: participant.userId })
+		.from(participant)
+		.where(and(eq(participant.conversationId, conversationId), isNull(participant.leftAt)));
+	return rows.map((row) => row.userId);
+}
+
+export async function addConversationMember(
+	conversationId: string,
+	addedBy: string,
+	body: AddMemberBody,
+): Promise<ParticipantResponse> {
+	const { userId, role, nickname } = body;
+
+	const updated = await db.transaction(async (tx) => {
+		const [active] = await tx
+			.select({ id: participant.id })
+			.from(participant)
+			.where(
+				and(
+					eq(participant.conversationId, conversationId),
+					eq(participant.userId, userId),
+					isNull(participant.leftAt),
+				),
+			)
+			.limit(1);
+
+		if (active) {
+			throw new HTTPException(409, { message: 'User is already a member of this conversation' });
+		}
+
+		const [inactive] = await tx
+			.select({ id: participant.id })
+			.from(participant)
+			.where(
+				and(
+					eq(participant.conversationId, conversationId),
+					eq(participant.userId, userId),
+					isNotNull(participant.leftAt),
+				),
+			)
+			.limit(1);
+
+		if (inactive) {
+			const [row] = await tx
+				.update(participant)
+				.set({
+					leftAt: null,
+					role: role ?? 'member',
+					nickname: nickname ?? null,
+					joinedAt: new Date(),
+					updatedAt: new Date(),
+				})
+				.where(eq(participant.id, inactive.id))
+				.returning();
+			return row;
+		}
+
+		const [row] = await tx
+			.insert(participant)
+			.values({
+				id: nanoid(),
+				conversationId,
+				userId,
+				role: role ?? 'member',
+				nickname: nickname ?? null,
+			})
+			.returning();
+
+		return row;
+	});
+
+	if (!updated) {
+		throw new HTTPException(500, { message: 'Failed to add member' });
+	}
+
+	const [convMeta] = await db
+		.select({ lastMessageId: conversation.lastMessageId, updatedAt: conversation.updatedAt })
+		.from(conversation)
+		.where(eq(conversation.id, conversationId))
+		.limit(1);
+
+	const participantIds = await getActiveParticipantIds(conversationId);
+	const notifyUserIds = [...new Set([...participantIds, userId])];
+
+	try {
+		await publish(conversationId, {
+			type: 'member_added',
+			conversationId,
+			userId,
+			role: updated.role,
+			nickname: updated.nickname,
+			addedBy,
+		});
+		await publishToUsers(notifyUserIds, {
+			type: 'conversation_updated',
+			conversationId,
+			lastMessageId: convMeta?.lastMessageId ?? '',
+			updatedAt: (convMeta?.updatedAt ?? new Date()).toISOString(),
+		});
+	} catch {
+		console.warn('[addConversationMember] Failed to publish member_added');
+	}
+
+	return participantResponseSchema.parse(updated);
+}
+
+export async function removeConversationMember(
+	conversationId: string,
+	requestingUserId: string,
+	targetUserId: string,
+): Promise<ParticipantResponse> {
+	if (requestingUserId === targetUserId) {
+		throw new HTTPException(400, { message: 'Self-removal is not allowed on this endpoint' });
+	}
+
+	const updated = await db.transaction(async (tx) => {
+		const [target] = await tx
+			.select({ id: participant.id, role: participant.role, nickname: participant.nickname })
+			.from(participant)
+			.where(
+				and(
+					eq(participant.conversationId, conversationId),
+					eq(participant.userId, targetUserId),
+					isNull(participant.leftAt),
+				),
+			)
+			.limit(1);
+
+		if (!target) {
+			throw new HTTPException(404, { message: 'Member not found' });
+		}
+
+		if (target.role === 'admin') {
+			const [countRow] = await tx
+				.select({ adminCount: count(participant.id) })
+				.from(participant)
+				.where(
+					and(
+						eq(participant.conversationId, conversationId),
+						eq(participant.role, 'admin'),
+						isNull(participant.leftAt),
+					),
+				);
+
+			const adminCount = Number(countRow?.adminCount ?? 0);
+			if (adminCount <= 1) {
+				throw new HTTPException(409, { message: 'Cannot remove the last admin' });
+			}
+		}
+
+		const [row] = await tx
+			.update(participant)
+			.set({ leftAt: new Date(), updatedAt: new Date() })
+			.where(eq(participant.id, target.id))
+			.returning();
+
+		return row ?? null;
+	});
+
+	if (!updated) {
+		throw new HTTPException(500, { message: 'Failed to remove member' });
+	}
+
+	const [convMeta] = await db
+		.select({ lastMessageId: conversation.lastMessageId, updatedAt: conversation.updatedAt })
+		.from(conversation)
+		.where(eq(conversation.id, conversationId))
+		.limit(1);
+
+	const participantIds = await getActiveParticipantIds(conversationId);
+	const notifyUserIds = [...new Set([...participantIds, targetUserId])];
+
+	try {
+		await publish(conversationId, {
+			type: 'member_removed',
+			conversationId,
+			userId: targetUserId,
+			removedBy: requestingUserId,
+		});
+		await publishToUsers(notifyUserIds, {
+			type: 'conversation_updated',
+			conversationId,
+			lastMessageId: convMeta?.lastMessageId ?? '',
+			updatedAt: (convMeta?.updatedAt ?? new Date()).toISOString(),
+		});
+	} catch {
+		console.warn('[removeConversationMember] Failed to publish member_removed');
+	}
+
+	return participantResponseSchema.parse(updated);
+}
+
+export async function updateMyMemberNickname(
+	conversationId: string,
+	userId: string,
+	body: UpdateMemberBody,
+): Promise<ParticipantResponse> {
+	const [row] = await db
+		.update(participant)
+		.set({ nickname: body.nickname ?? null })
+		.where(
+			and(
+				eq(participant.conversationId, conversationId),
+				eq(participant.userId, userId),
+				isNull(participant.leftAt),
+			),
+		)
+		.returning();
+
+	if (!row) {
+		throw new HTTPException(404, { message: 'Member not found' });
+	}
+
+	return participantResponseSchema.parse(row);
 }

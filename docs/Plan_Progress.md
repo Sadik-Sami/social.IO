@@ -1,7 +1,7 @@
 # Real-Time Chat Application - Plan & Progress
 
 > Stack target: Next.js, Hono, Better Auth, Drizzle ORM, PostgreSQL, Redis, Cloudinary, WebSockets
-> Snapshot date: May 17, 2026
+> Snapshot date: May 19, 2026
 
 ---
 
@@ -52,20 +52,21 @@ This document tracks the current execution state of the social.io platform, sepa
 ### REST endpoints (Implemented)
 - `GET /api/profile/me`, `POST /api/profile`, `PATCH /api/profile`, `PATCH /api/profile/avatar`, `GET /api/profile/search`
 - `GET /api/conversations`, `POST /api/conversations`, `GET /api/conversations/:id`
+- `POST /api/conversations/:id/members`, `DELETE /api/conversations/:id/members/:userId`, `PATCH /api/conversations/:id/members/me`
 - `GET /api/conversations/:id/messages`, `POST /api/conversations/:id/messages`
 - `PATCH /api/messages/:id`, `DELETE /api/messages/:id`
-- `POST /api/upload/sign`, `DELETE /api/upload/image`
+- `POST /api/messages/:id/reactions`, `DELETE /api/messages/:id/reactions/:emoji`
+- `GET /api/upload/sign`, `DELETE /api/upload/image`
 
 ### REST endpoints (Pending)
-- `POST /api/conversations/:id/members`, `DELETE /api/conversations/:id/members/:userId`, `PATCH /api/conversations/:id/members/me`
-- `POST /api/messages/:id/reactions`, `DELETE /api/messages/:id/reactions/:emoji`
+- None
 
 ### Realtime events (Implemented)
 - **Client -> server:** `join_conversation`, `send_message`, `typing_start`, `typing_stop`, `conversation_seen`
-- **Server -> client:** `new_message`, `typing_update`, `conversation_status_update`, `conversation_updated`
+- **Server -> client:** `new_message`, `typing_update`, `conversation_status_update`, `conversation_updated`, `member_added`, `member_removed`, `reaction_update`
 
 ### Realtime events (Pending)
-- **Server -> client:** `member_added`, `member_removed`, `reaction_update`
+- None
 
 ---
 
@@ -97,9 +98,9 @@ This document tracks the current execution state of the social.io platform, sepa
 - [x] Encryption at rest for message content
 - [x] Cache invalidation on new message, edit, and delete
 - [x] UI Design System Rework ("Warm Precision")
-- [ ] Group membership admin flows (Basic DB layer exists, UI pending)
-- [ ] Emoji reactions
-- [ ] Image message flow (Cloudinary signed upload)
+- [x] Group membership admin flows (Server done, UI pending)
+- [x] Emoji reactions (Server done, UI pending)
+- [x] Image message flow (Cloudinary signed upload)
 
 ---
 
@@ -133,9 +134,9 @@ This document tracks the current execution state of the social.io platform, sepa
 - [x] Chat list preview
 
 ### Day 5 - Groups, Roles, Reactions
-- [ ] Group role authorization gates
-- [ ] Member add/remove + nickname updates
-- [ ] Reaction mutation + realtime sync
+- [x] Group role authorization gates
+- [x] Member add/remove + nickname updates
+- [x] Reaction mutation + realtime sync
 - [ ] Group member management UI
 - [ ] Reaction picker and reaction list display
 

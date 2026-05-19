@@ -1,34 +1,34 @@
-"use client";
+'use client';
 
-import { createContext, useCallback, useContext, useEffect, useRef } from "react";
-import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
+import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
-import { env } from "@socialIO/env/web";
+import { env } from '@socialIO/env/web';
 
-import { useAuthStore } from "@/stores/auth-store";
-import { useChatStore } from "@/stores/chat-store";
-import { getWsUrl, WS_HEARTBEAT_INTERVAL, WS_RECONNECT_DELAY } from "@/lib/ws";
-import { messageKeys, conversationKeys } from "@/lib/query-keys";
-import { parseInboundEvent } from "@/types/ws";
-import type { OutboundEvent, InboundEvent } from "@/types/ws";
-import type { MessagePage } from "@/types/api";
+import { useAuthStore } from '@/stores/auth-store';
+import { useChatStore } from '@/stores/chat-store';
+import { getWsUrl, WS_HEARTBEAT_INTERVAL, WS_RECONNECT_DELAY } from '@/lib/ws';
+import { messageKeys, conversationKeys } from '@/lib/query-keys';
+import { parseInboundEvent } from '@/types/ws';
+import type { OutboundEvent, InboundEvent } from '@/types/ws';
+import type { MessagePage } from '@/types/api';
 
 /**
  * @description
  * Context for WebSocket connection
  */
 interface WSContextValue {
-  send: (event: OutboundEvent) => void;
-  isConnected: boolean;
+	send: (event: OutboundEvent) => void;
+	isConnected: boolean;
 }
 
 const WSContext = createContext<WSContextValue | null>(null);
 
 export function useWS() {
-  const ctx = useContext(WSContext);
-  if (!ctx) throw new Error("useWS must be used inside WSProvider");
-  return ctx;
+	const ctx = useContext(WSContext);
+	if (!ctx) throw new Error('useWS must be used inside WSProvider');
+	return ctx;
 }
 
 /**
@@ -36,282 +36,286 @@ export function useWS() {
  * Provider for WebSocket connection
  */
 export function WSProvider({ children }: { children: React.ReactNode }) {
-  const queryClient = useQueryClient();
-  const session = useAuthStore((s) => s.session);
-  const activeConversationId = useChatStore((s) => s.activeConversationId);
-  const setTypingUsers = useChatStore((s) => s.setTypingUsers);
-  const setWsStatus = useChatStore((s) => s.setWsStatus);
-  const updateParticipantProgress = useChatStore((s) => s.updateParticipantProgress);
-  const wsStatus = useChatStore((s) => s.wsStatus);
+	const queryClient = useQueryClient();
+	const session = useAuthStore((s) => s.session);
+	const activeConversationId = useChatStore((s) => s.activeConversationId);
+	const setTypingUsers = useChatStore((s) => s.setTypingUsers);
+	const setWsStatus = useChatStore((s) => s.setWsStatus);
+	const updateParticipantProgress = useChatStore((s) => s.updateParticipantProgress);
+	const wsStatus = useChatStore((s) => s.wsStatus);
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const activeConversationRef = useRef(activeConversationId);
-  const prevConversationRef = useRef<string | null>(null);
+	const wsRef = useRef<WebSocket | null>(null);
+	const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+	const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const activeConversationRef = useRef(activeConversationId);
+	const prevConversationRef = useRef<string | null>(null);
 
-  // Keep ref in sync with state (avoid stale closures in WS callbacks)
-  activeConversationRef.current = activeConversationId;
+	// Keep ref in sync with state (avoid stale closures in WS callbacks)
+	activeConversationRef.current = activeConversationId;
 
-  /**
-   * @description
-   * Handles inbound WebSocket events
-   */
-  const handleInbound = useCallback(
-    (event: InboundEvent) => {
-      switch (event.type) {
-        case "new_message": {
-          const { conversationId, message, tempId } = event;
+	/**
+	 * @description
+	 * Handles inbound WebSocket events
+	 */
+	const handleInbound = useCallback(
+		(event: InboundEvent) => {
+			switch (event.type) {
+				case 'new_message': {
+					const { conversationId, message, tempId } = event;
 
-          queryClient.setQueryData<InfiniteData<MessagePage>>(
-            messageKeys.list(conversationId),
-            (old) => {
-              if (!old) return old;
+					queryClient.setQueryData<InfiniteData<MessagePage>>(messageKeys.list(conversationId), (old) => {
+						if (!old) return old;
 
-              // Edit/delete case — update in place across all pages
-              for (let i = 0; i < old.pages.length; i++) {
-                const idx = old.pages[i].messages.findIndex((m) => m.id === message.id);
-                if (idx !== -1) {
-                  const newPages = [...old.pages];
-                  newPages[i] = {
-                    ...newPages[i],
-                    messages: newPages[i].messages.map((m) =>
-                      m.id === message.id ? message : m,
-                    ),
-                  };
-                  return { ...old, pages: newPages };
-                }
-              }
+						// Edit/delete case — update in place across all pages
+						for (let i = 0; i < old.pages.length; i++) {
+							const idx = old.pages[i].messages.findIndex((m) => m.id === message.id);
+							if (idx !== -1) {
+								const newPages = [...old.pages];
+								newPages[i] = {
+									...newPages[i],
+									messages: newPages[i].messages.map((m) => (m.id === message.id ? message : m)),
+								};
+								return { ...old, pages: newPages };
+							}
+						}
 
-              const newPages = [...old.pages];
+						const newPages = [...old.pages];
 
-              // If tempId exists, replace the optimistic message
-              if (tempId) {
-                for (let i = 0; i < newPages.length; i++) {
-                  const tempIdx = newPages[i].messages.findIndex((m) => m.id === tempId);
-                  if (tempIdx !== -1) {
-                    const newMessages = [...newPages[i].messages];
-                    newMessages[tempIdx] = message;
-                    newPages[i] = { ...newPages[i], messages: newMessages };
-                    return { ...old, pages: newPages };
-                  }
-                }
-              }
+						// If tempId exists, replace the optimistic message
+						if (tempId) {
+							for (let i = 0; i < newPages.length; i++) {
+								const tempIdx = newPages[i].messages.findIndex((m) => m.id === tempId);
+								if (tempIdx !== -1) {
+									const newMessages = [...newPages[i].messages];
+									newMessages[tempIdx] = message;
+									newPages[i] = { ...newPages[i], messages: newMessages };
+									return { ...old, pages: newPages };
+								}
+							}
+						}
 
-              // New message (no tempId match) — prepend to first page
-              newPages[0] = {
-                ...newPages[0],
-                messages: [message, ...newPages[0].messages],
-              };
-              return { ...old, pages: newPages };
-            },
-          );
+						// New message (no tempId match) — prepend to first page
+						newPages[0] = {
+							...newPages[0],
+							messages: [message, ...newPages[0].messages],
+						};
+						return { ...old, pages: newPages };
+					});
 
-          // Always refresh unread counts (server computes correctly for sender)
-          queryClient.invalidateQueries({ queryKey: conversationKeys.unread() });
+					// Always refresh unread counts (server computes correctly for sender)
+					queryClient.invalidateQueries({ queryKey: conversationKeys.unread() });
 
-          // Refresh conversation list for background conversations
-          if (conversationId !== activeConversationRef.current) {
-            queryClient.invalidateQueries({ queryKey: conversationKeys.list() });
-          }
-          break;
-        }
+					// Refresh conversation list for background conversations
+					if (conversationId !== activeConversationRef.current) {
+						queryClient.invalidateQueries({ queryKey: conversationKeys.list() });
+					}
+					break;
+				}
 
-        case "typing_update": {
-          setTypingUsers(event.conversationId, event.typingUserIds);
-          break;
-        }
+				case 'typing_update': {
+					setTypingUsers(event.conversationId, event.typingUserIds);
+					break;
+				}
 
-        case "presence_update": {
-          // Invalidate conversations to refresh online indicators
-          queryClient.invalidateQueries({ queryKey: conversationKeys.all });
-          break;
-        }
+				case 'presence_update': {
+					// Invalidate conversations to refresh online indicators
+					queryClient.invalidateQueries({ queryKey: conversationKeys.all });
+					break;
+				}
 
-        case "conversation_status_update": {
-          updateParticipantProgress(
-            event.conversationId,
-            event.userId,
-            event.lastDeliveredSequence,
-            event.lastSeenSequence,
-          );
+				case 'conversation_status_update': {
+					updateParticipantProgress(
+						event.conversationId,
+						event.userId,
+						event.lastDeliveredSequence,
+						event.lastSeenSequence,
+					);
 
-          // If this status update is for ME, my unread count might have changed!
-          const myUserId = useAuthStore.getState().session?.user?.id;
-          if (event.userId === myUserId) {
-            queryClient.invalidateQueries({ queryKey: conversationKeys.unread() });
-            queryClient.invalidateQueries({ queryKey: conversationKeys.list() });
-          }
-          break;
-        }
+					// If this status update is for ME, my unread count might have changed!
+					const myUserId = useAuthStore.getState().session?.user?.id;
+					if (event.userId === myUserId) {
+						queryClient.invalidateQueries({ queryKey: conversationKeys.unread() });
+						queryClient.invalidateQueries({ queryKey: conversationKeys.list() });
+					}
+					break;
+				}
 
-        case "conversation_updated": {
-          queryClient.invalidateQueries({ queryKey: conversationKeys.all });
-          break;
-        }
+				case 'conversation_updated': {
+					queryClient.invalidateQueries({ queryKey: conversationKeys.all });
+					break;
+				}
 
-        case "joined": {
-          break;
-        }
+				case 'member_added':
+				case 'member_removed': {
+					queryClient.invalidateQueries({ queryKey: conversationKeys.detail(event.conversationId) });
+					queryClient.invalidateQueries({ queryKey: conversationKeys.list() });
+					queryClient.invalidateQueries({ queryKey: conversationKeys.unread() });
+					break;
+				}
 
-        case "heartbeat_ack": {
-          break;
-        }
+				case 'reaction_update': {
+					queryClient.invalidateQueries({ queryKey: messageKeys.list(event.conversationId) });
+					break;
+				}
 
-        case "error": {
-          toast.error("Realtime error: " + event.error);
-          break;
-        }
-      }
-    },
-    [queryClient, setTypingUsers],
-  );
+				case 'joined': {
+					break;
+				}
 
-  /**
-   * @description
-   * Sends raw WebSocket events
-   */
-  const sendRaw = useCallback((ws: WebSocket, event: OutboundEvent) => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(event));
-    }
-  }, []);
+				case 'heartbeat_ack': {
+					break;
+				}
 
-  const send = useCallback(
-    (event: OutboundEvent) => {
-      if (wsRef.current) {
-        sendRaw(wsRef.current, event);
-      }
-    },
-    [sendRaw],
-  );
+				case 'error': {
+					toast.error('Realtime error: ' + event.error);
+					break;
+				}
+			}
+		},
+		[queryClient, setTypingUsers],
+	);
 
-  /**
-   * @description
-   * Handles WebSocket connection lifecycle
-   */
-  useEffect(() => {
-    if (!session?.user) return;
+	/**
+	 * @description
+	 * Sends raw WebSocket events
+	 */
+	const sendRaw = useCallback((ws: WebSocket, event: OutboundEvent) => {
+		if (ws.readyState === WebSocket.OPEN) {
+			ws.send(JSON.stringify(event));
+		}
+	}, []);
 
-    // Close any existing connection
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.close();
-    }
+	const send = useCallback(
+		(event: OutboundEvent) => {
+			if (wsRef.current) {
+				sendRaw(wsRef.current, event);
+			}
+		},
+		[sendRaw],
+	);
 
-    const wsUrl = getWsUrl(env.NEXT_PUBLIC_SERVER_URL);
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+	/**
+	 * @description
+	 * Handles WebSocket connection lifecycle
+	 */
+	useEffect(() => {
+		if (!session?.user) return;
 
-    ws.onopen = () => {
-      setWsStatus("open");
+		// Close any existing connection
+		if (wsRef.current?.readyState === WebSocket.OPEN) {
+			wsRef.current.close();
+		}
 
-      // Invalidate all conversations to sync state missed while offline
-      queryClient.invalidateQueries({ queryKey: conversationKeys.all });
+		const wsUrl = getWsUrl(env.NEXT_PUBLIC_SERVER_URL);
+		const ws = new WebSocket(wsUrl);
+		wsRef.current = ws;
 
-      // Start heartbeat
-      heartbeatTimerRef.current = setInterval(() => {
-        sendRaw(ws, { type: "heartbeat", payload: {} });
-      }, WS_HEARTBEAT_INTERVAL);
+		ws.onopen = () => {
+			setWsStatus('open');
 
-      // Rejoin active conversation after reconnect
-      const convId = activeConversationRef.current;
-      if (convId) {
-        sendRaw(ws, {
-          type: "join_conversation",
-          payload: { conversationId: convId },
-        });
+			// Invalidate all conversations to sync state missed while offline
+			queryClient.invalidateQueries({ queryKey: conversationKeys.all });
 
-        // Sync read state for messages received while offline
-        const pages = queryClient.getQueryData<InfiniteData<MessagePage>>(messageKeys.list(convId))?.pages;
-        const latestMessage = pages?.[0]?.messages?.[0];
-        if (latestMessage && !latestMessage.id.startsWith("temp-")) {
-          sendRaw(ws, {
-            type: "conversation_seen",
-            payload: { conversationId: convId, lastSeenSequence: latestMessage.sequenceNumber },
-          });
-        }
-      }
-    };
+			// Start heartbeat
+			heartbeatTimerRef.current = setInterval(() => {
+				sendRaw(ws, { type: 'heartbeat', payload: {} });
+			}, WS_HEARTBEAT_INTERVAL);
 
-    ws.onmessage = (event) => {
-      const raw = typeof event.data === "string" ? event.data : String(event.data);
-      const parsed = parseInboundEvent(raw);
-      if (parsed) {
-        handleInbound(parsed);
-      }
-    };
+			// Rejoin active conversation after reconnect
+			const convId = activeConversationRef.current;
+			if (convId) {
+				sendRaw(ws, {
+					type: 'join_conversation',
+					payload: { conversationId: convId },
+				});
 
-    ws.onclose = () => {
-      setWsStatus("closed");
+				// Sync read state for messages received while offline
+				const pages = queryClient.getQueryData<InfiniteData<MessagePage>>(messageKeys.list(convId))?.pages;
+				const latestMessage = pages?.[0]?.messages?.[0];
+				if (latestMessage && !latestMessage.id.startsWith('temp-')) {
+					sendRaw(ws, {
+						type: 'conversation_seen',
+						payload: { conversationId: convId, lastSeenSequence: latestMessage.sequenceNumber },
+					});
+				}
+			}
+		};
 
-      if (heartbeatTimerRef.current) {
-        clearInterval(heartbeatTimerRef.current);
-        heartbeatTimerRef.current = null;
-      }
+		ws.onmessage = (event) => {
+			const raw = typeof event.data === 'string' ? event.data : String(event.data);
+			const parsed = parseInboundEvent(raw);
+			if (parsed) {
+				handleInbound(parsed);
+			}
+		};
 
-      // Auto-reconnect
-      reconnectTimerRef.current = setTimeout(() => {
-        // Re-check session before reconnecting (may have logged out)
-        if (useAuthStore.getState().session?.user) {
-          setWsStatus("connecting");
-        }
-      }, WS_RECONNECT_DELAY);
-    };
+		ws.onclose = () => {
+			setWsStatus('closed');
 
-    ws.onerror = () => {
-      // onerror always fires before onclose — onclose handles cleanup
-    };
+			if (heartbeatTimerRef.current) {
+				clearInterval(heartbeatTimerRef.current);
+				heartbeatTimerRef.current = null;
+			}
 
-    setWsStatus("connecting");
+			// Auto-reconnect
+			reconnectTimerRef.current = setTimeout(() => {
+				// Re-check session before reconnecting (may have logged out)
+				if (useAuthStore.getState().session?.user) {
+					setWsStatus('connecting');
+				}
+			}, WS_RECONNECT_DELAY);
+		};
 
-    return () => {
-      if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-      ws.close();
-      wsRef.current = null;
-    };
-  }, [session?.user?.id, setWsStatus, sendRaw, handleInbound]);
+		ws.onerror = () => {
+			// onerror always fires before onclose — onclose handles cleanup
+		};
 
-  /**
-   * @description
-   * Handles auto-join/leave when active conversation changes
-   */
-  useEffect(() => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+		setWsStatus('connecting');
 
-    // Leave previous conversation
-    const prev = prevConversationRef.current;
-    if (prev && prev !== activeConversationId) {
-      send({
-        type: "leave_conversation",
-        payload: { conversationId: prev },
-      });
-    }
+		return () => {
+			if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+			if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+			ws.close();
+			wsRef.current = null;
+		};
+	}, [session?.user?.id, setWsStatus, sendRaw, handleInbound]);
 
-    // Join new conversation
-    if (activeConversationId) {
-      send({
-        type: "join_conversation",
-        payload: { conversationId: activeConversationId },
-      });
-      setTypingUsers(activeConversationId, []);
-    }
+	/**
+	 * @description
+	 * Handles auto-join/leave when active conversation changes
+	 */
+	useEffect(() => {
+		if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
 
-    prevConversationRef.current = activeConversationId;
-  }, [activeConversationId, send, setTypingUsers]);
+		// Leave previous conversation
+		const prev = prevConversationRef.current;
+		if (prev && prev !== activeConversationId) {
+			send({
+				type: 'leave_conversation',
+				payload: { conversationId: prev },
+			});
+		}
 
-  /**
-   * @description
-   * Render WebSocket provider
-   */
-  const contextValue: WSContextValue = {
-    send,
-    isConnected: wsStatus === "open",
-  };
+		// Join new conversation
+		if (activeConversationId) {
+			send({
+				type: 'join_conversation',
+				payload: { conversationId: activeConversationId },
+			});
+			setTypingUsers(activeConversationId, []);
+		}
 
-  return (
-    <WSContext.Provider value={contextValue}>
-      {children}
-    </WSContext.Provider>
-  );
+		prevConversationRef.current = activeConversationId;
+	}, [activeConversationId, send, setTypingUsers]);
+
+	/**
+	 * @description
+	 * Render WebSocket provider
+	 */
+	const contextValue: WSContextValue = {
+		send,
+		isConnected: wsStatus === 'open',
+	};
+
+	return <WSContext.Provider value={contextValue}>{children}</WSContext.Provider>;
 }

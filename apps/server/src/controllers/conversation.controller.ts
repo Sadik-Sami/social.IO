@@ -3,11 +3,26 @@ import { HTTPException } from 'hono/http-exception';
 
 import type { AppEnv } from '@/types/app-env';
 
-import { isAuthenticated, isMember, validate } from '@/middlewares';
+import { isAuthenticated, isMember, requireGroupAdmin, validate } from '@/middlewares';
 
-import { conversationIdParamSchema, createConversationBodySchema } from '@/validators';
+import {
+	addMemberBodySchema,
+	conversationIdParamSchema,
+	createConversationBodySchema,
+	memberParamSchema,
+	updateMemberBodySchema,
+} from '@/validators';
 
-import { createGroup, findOrCreateDM, getConversationById, getUnreadCounts, getUserConversations } from '@/services';
+import {
+	addConversationMember,
+	createGroup,
+	findOrCreateDM,
+	getConversationById,
+	getUnreadCounts,
+	getUserConversations,
+	removeConversationMember,
+	updateMyMemberNickname,
+} from '@/services';
 
 export const conversationController = new Hono<AppEnv>();
 
@@ -119,5 +134,82 @@ conversationController.get(
 		}
 
 		return c.json({ success: true, conversation });
+	},
+);
+
+/**
+ * @route POST /conversations/:id/members
+ * @desc Add a member to a group conversation (admin only)
+ * @access Private
+ */
+conversationController.post(
+	'/:id/members',
+	isAuthenticated,
+	isMember,
+	requireGroupAdmin,
+	validate('param', conversationIdParamSchema),
+	validate('json', addMemberBodySchema),
+	async (c) => {
+		const user = c.get('user');
+		const userId = user?.id;
+		if (!userId) {
+			throw new HTTPException(401, { message: 'Unauthorized' });
+		}
+
+		const { id: conversationId } = c.req.valid('param');
+		const body = c.req.valid('json');
+
+		const participant = await addConversationMember(conversationId, userId, body);
+		return c.json({ success: true, participant }, 201);
+	},
+);
+
+/**
+ * @route DELETE /conversations/:id/members/:userId
+ * @desc Remove a member from a group conversation (admin only)
+ * @access Private
+ */
+conversationController.delete(
+	'/:id/members/:userId',
+	isAuthenticated,
+	isMember,
+	requireGroupAdmin,
+	validate('param', memberParamSchema),
+	async (c) => {
+		const user = c.get('user');
+		const userId = user?.id;
+		if (!userId) {
+			throw new HTTPException(401, { message: 'Unauthorized' });
+		}
+
+		const { id: conversationId, userId: targetUserId } = c.req.valid('param');
+		const participant = await removeConversationMember(conversationId, userId, targetUserId);
+		return c.json({ success: true, participant });
+	},
+);
+
+/**
+ * @route PATCH /conversations/:id/members/me
+ * @desc Update my nickname in a conversation
+ * @access Private
+ */
+conversationController.patch(
+	'/:id/members/me',
+	isAuthenticated,
+	isMember,
+	validate('param', conversationIdParamSchema),
+	validate('json', updateMemberBodySchema),
+	async (c) => {
+		const user = c.get('user');
+		const userId = user?.id;
+		if (!userId) {
+			throw new HTTPException(401, { message: 'Unauthorized' });
+		}
+
+		const { id: conversationId } = c.req.valid('param');
+		const body = c.req.valid('json');
+
+		const participant = await updateMyMemberNickname(conversationId, userId, body);
+		return c.json({ success: true, participant });
 	},
 );

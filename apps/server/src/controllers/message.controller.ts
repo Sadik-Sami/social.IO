@@ -1,15 +1,26 @@
 import { Hono } from 'hono';
 import { type AppEnv } from '@/types/app-env';
 import { HTTPException } from 'hono/http-exception';
-import { sendMessage, getMessages, editMessage, softDeleteMessage, markConversationSeen } from '@/services';
+import {
+	addReaction,
+	editMessage,
+	getMessages,
+	markConversationSeen,
+	removeReaction,
+	sendMessage,
+	softDeleteMessage,
+} from '@/services';
 import { isAuthenticated, validate, isMember } from '@/middlewares';
 import {
 	conversationIdParamSchema,
 	createMessageBodySchema,
 	editMessageBodySchema,
+	addReactionBodySchema,
+	messageIdOnlyParamSchema,
 	messageIdParamSchema,
 	messageListQuerySchema,
 	markSeenBodySchema,
+	reactionParamSchema,
 } from '@/validators';
 
 export const messageController = new Hono<AppEnv>();
@@ -158,6 +169,53 @@ messageController.delete(
 
 		const deletedMessage = await softDeleteMessage(messageId, userId);
 		return c.json({ success: true, deletedMessage });
+	},
+);
+
+/**
+ * @route POST /messages/:id/reactions
+ * @desc Add a reaction to a message (idempotent)
+ * @access Private (must be a member of the conversation)
+ */
+messageController.post(
+	'/messages/:id/reactions',
+	isAuthenticated,
+	validate('param', messageIdOnlyParamSchema),
+	validate('json', addReactionBodySchema),
+	async (c) => {
+		const user = c.get('user');
+		const userId = user?.id;
+		if (!userId) {
+			throw new HTTPException(401, { message: 'Unauthorized' });
+		}
+
+		const { id: messageId } = c.req.valid('param');
+		const body = c.req.valid('json');
+
+		const result = await addReaction(messageId, userId, body);
+		return c.json({ success: true, ...result }, result.created ? 201 : 200);
+	},
+);
+
+/**
+ * @route DELETE /messages/:id/reactions/:emoji
+ * @desc Remove a reaction from a message (idempotent)
+ * @access Private (must be a member of the conversation)
+ */
+messageController.delete(
+	'/messages/:id/reactions/:emoji',
+	isAuthenticated,
+	validate('param', reactionParamSchema),
+	async (c) => {
+		const user = c.get('user');
+		const userId = user?.id;
+		if (!userId) {
+			throw new HTTPException(401, { message: 'Unauthorized' });
+		}
+
+		const { id: messageId, emoji } = c.req.valid('param');
+		const result = await removeReaction(messageId, userId, emoji);
+		return c.json({ success: true, ...result });
 	},
 );
 

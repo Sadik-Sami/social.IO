@@ -106,6 +106,31 @@ export type ConversationUpdatedEvent = {
 	updatedAt: string;
 };
 
+export type MemberAddedEvent = {
+	type: 'member_added';
+	conversationId: string;
+	userId: string;
+	role: 'admin' | 'member';
+	nickname: string | null;
+	addedBy: string;
+};
+
+export type MemberRemovedEvent = {
+	type: 'member_removed';
+	conversationId: string;
+	userId: string;
+	removedBy: string;
+};
+
+export type ReactionUpdateEvent = {
+	type: 'reaction_update';
+	conversationId: string;
+	messageId: string;
+	emoji: string;
+	userId: string;
+	action: 'added' | 'removed';
+};
+
 export type HeartbeatAckEvent = {
 	type: 'heartbeat_ack';
 };
@@ -123,6 +148,9 @@ export type OutboundEvent =
 	| PresenceUpdateEvent
 	| ConversationStatusUpdateEvent
 	| ConversationUpdatedEvent
+	| MemberAddedEvent
+	| MemberRemovedEvent
+	| ReactionUpdateEvent
 	| HeartbeatAckEvent
 	| ErrorEvent;
 

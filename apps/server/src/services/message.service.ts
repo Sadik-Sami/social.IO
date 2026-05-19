@@ -7,9 +7,12 @@ import {
 	type MessageResponse,
 	type CreateMessageBody,
 	type EditMessageBody,
+	type AddReactionBody,
+	reactionResponseSchema,
+	type ReactionResponse,
 } from '@/validators';
 import { db } from '@socialIO/db';
-import { conversation, message, messageEditHistory, participant, userProfile } from '@socialIO/db/schema';
+import { conversation, message, messageEditHistory, messageReaction, participant, userProfile } from '@socialIO/db/schema';
 import { and, desc, eq, isNull, lt, max, ne } from 'drizzle-orm';
 import { HTTPException } from 'hono/http-exception';
 import {
@@ -37,6 +40,38 @@ async function getConversationParticipantIds(conversationId: string): Promise<st
 		.from(participant)
 		.where(and(eq(participant.conversationId, conversationId), isNull(participant.leftAt)));
 	return rows.map((r) => r.userId);
+}
+
+async function resolveMessageMembership(
+	messageId: string,
+	userId: string,
+): Promise<{ conversationId: string }> {
+	const [row] = await db
+		.select({
+			conversationId: message.conversationId,
+			participantId: participant.id,
+		})
+		.from(message)
+		.leftJoin(
+			participant,
+			and(
+				eq(participant.conversationId, message.conversationId),
+				eq(participant.userId, userId),
+				isNull(participant.leftAt),
+			),
+		)
+		.where(eq(message.id, messageId))
+		.limit(1);
+
+	if (!row) {
+		throw new HTTPException(404, { message: 'Message not found' });
+	}
+
+	if (!row.participantId) {
+		throw new HTTPException(403, { message: 'Not a participant in this conversation' });
+	}
+
+	return { conversationId: row.conversationId };
 }
 
 // ─── Send Message ─────────────────────────────────────────────────────────────
@@ -129,11 +164,11 @@ export async function sendMessage(
 		.where(and(eq(participant.conversationId, conversationId), eq(participant.userId, senderId)));
 
 	try {
-		await publish(conversationId, { 
-			type: 'new_message', 
-			conversationId, 
+		await publish(conversationId, {
+			type: 'new_message',
+			conversationId,
 			message: formatted,
-			tempId: body.tempId 
+			tempId: body.tempId
 		});
 
 		await publish(conversationId, {
@@ -475,7 +510,7 @@ export async function markConversationSeen(
 	lastSeenSequence: number,
 ): Promise<void> {
 	const [current] = await db
-		.select({ 
+		.select({
 			lastDeliveredSequence: participant.lastDeliveredSequence,
 			lastSeenSequence: participant.lastSeenSequence,
 		})
@@ -594,4 +629,83 @@ export async function getParticipantProgress(
 		.limit(1);
 
 	return row ?? null;
+}
+
+export async function addReaction(
+	messageId: string,
+	userId: string,
+	body: AddReactionBody,
+): Promise<{ created: boolean; reaction: ReactionResponse | null }> {
+	const { conversationId } = await resolveMessageMembership(messageId, userId);
+
+	const [inserted] = await db
+		.insert(messageReaction)
+		.values({
+			id: nanoid(),
+			messageId,
+			userId,
+			emoji: body.emoji,
+		})
+		.onConflictDoNothing({
+			target: [messageReaction.messageId, messageReaction.userId, messageReaction.emoji],
+		})
+		.returning();
+
+	const created = Boolean(inserted);
+	const reaction = inserted ? reactionResponseSchema.parse(inserted) : null;
+
+	if (created) {
+		try {
+			await publish(conversationId, {
+				type: 'reaction_update',
+				conversationId,
+				messageId,
+				emoji: body.emoji,
+				userId,
+				action: 'added',
+			});
+		} catch {
+			console.warn('[addReaction] Failed to publish reaction_update');
+		}
+	}
+
+	return { created, reaction };
+}
+
+export async function removeReaction(
+	messageId: string,
+	userId: string,
+	emoji: string,
+): Promise<{ removed: boolean }> {
+	const { conversationId } = await resolveMessageMembership(messageId, userId);
+
+	const deleted = await db
+		.delete(messageReaction)
+		.where(
+			and(
+				eq(messageReaction.messageId, messageId),
+				eq(messageReaction.userId, userId),
+				eq(messageReaction.emoji, emoji),
+			),
+		)
+		.returning({ id: messageReaction.id });
+
+	const removed = deleted.length > 0;
+
+	if (removed) {
+		try {
+			await publish(conversationId, {
+				type: 'reaction_update',
+				conversationId,
+				messageId,
+				emoji,
+				userId,
+				action: 'removed',
+			});
+		} catch {
+			console.warn('[removeReaction] Failed to publish reaction_update');
+		}
+	}
+
+	return { removed };
 }
