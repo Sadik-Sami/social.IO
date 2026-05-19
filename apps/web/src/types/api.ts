@@ -26,6 +26,14 @@ export const searchResultSchema = z.object({
 
 //  Message
 
+export const messageReactionSchema = z.object({
+	id: z.string(),
+	messageId: z.string(),
+	userId: z.string(),
+	emoji: z.string(),
+	createdAt: z.string(),
+});
+
 export const messageResponseSchema = z.object({
 	id: z.string(),
 	conversationId: z.string(),
@@ -41,6 +49,7 @@ export const messageResponseSchema = z.object({
 	deletedAt: z.string().nullable(),
 	createdAt: z.string(),
 	senderDisplayName: z.string().nullable().optional(),
+	reactions: z.array(messageReactionSchema).default([]),
 });
 
 //  Conversation

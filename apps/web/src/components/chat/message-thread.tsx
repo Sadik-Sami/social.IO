@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { motion } from "motion/react";
 
@@ -16,6 +16,8 @@ import { useChatStore } from "@/stores/chat-store";
 import { useWS } from "@/components/providers/ws-provider";
 import { MessageBubble } from "./message-bubble";
 import { TypingIndicator } from "./typing-indicator";
+
+import { GroupDetailsModal } from "./group-details-modal";
 
 const EMPTY_ARRAY: string[] = [];
 
@@ -151,6 +153,8 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 	// Filter out current user from typing users
 	const otherTypingUsers = typingUsers.filter((id) => id !== currentUserId);
 
+	const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+
 	return (
 		<div className="flex flex-1 flex-col min-h-0 bg-background">
 			{/* Conversation header */}
@@ -164,7 +168,13 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 					<ArrowLeft className="h-5 w-5 text-foreground" />
 				</button>
 
-				<div className="flex items-center gap-2">
+				<button
+					onClick={() => {
+						if (detail?.type === "group") setIsGroupModalOpen(true);
+					}}
+					disabled={detail?.type !== "group"}
+					className="flex items-center gap-2 text-left rounded-lg transition-colors hover:bg-muted/50 p-1 -ml-1 disabled:hover:bg-transparent disabled:cursor-default"
+				>
 					<Avatar className="h-9 w-9">
 						<AvatarImage src={headerAvatar ?? undefined} alt={headerName} />
 						<AvatarFallback className="bg-primary/15 text-primary text-xs font-semibold">
@@ -182,7 +192,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 							</span>
 						)}
 					</div>
-				</div>
+				</button>
 			</div>
 
 			{/* Messages area */}
@@ -230,6 +240,12 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 					/>
 				)}
 			</div>
+
+			<GroupDetailsModal
+				conversationId={conversationId}
+				open={isGroupModalOpen}
+				onOpenChange={setIsGroupModalOpen}
+			/>
 		</div>
 	);
 }

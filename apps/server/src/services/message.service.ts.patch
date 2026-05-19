@@ -1,0 +1,65 @@
+--- apps/server/src/services/message.service.ts
++++ apps/server/src/services/message.service.ts
+@@ -216,25 +216,9 @@
+ 		}
+ 	}
+ 
++	const messageSelectCols = {
++		id: message.id,
++		conversationId: message.conversationId,
++		senderId: message.senderId,
++		sequenceNumber: message.sequenceNumber,
++		contentEnc: message.contentEnc,
++		contentIv: message.contentIv,
++		type: message.type,
++		imageUrl: message.imageUrl,
++		replyToId: message.replyToId,
++		isEdited: message.isEdited,
++		editedAt: message.editedAt,
++		isDeleted: message.isDeleted,
++		deletedAt: message.deletedAt,
++		createdAt: message.createdAt,
++		senderDisplayName: userProfile.displayName,
++	};
++
+ 	const rows = await db
+-		.select({
+-			id: message.id,
+-			conversationId: message.conversationId,
+-			senderId: message.senderId,
+-			sequenceNumber: message.sequenceNumber,
+-			contentEnc: message.contentEnc,
+-			contentIv: message.contentIv,
+-			type: message.type,
+-			imageUrl: message.imageUrl,
+-			replyToId: message.replyToId,
+-			isEdited: message.isEdited,
+-			editedAt: message.editedAt,
+-			isDeleted: message.isDeleted,
+-			deletedAt: message.deletedAt,
+-			createdAt: message.createdAt,
+-			senderDisplayName: userProfile.displayName,
+-		})
++		.select(messageSelectCols)
+ 		.from(message)
+ 		.leftJoin(userProfile, eq(message.senderId, userProfile.id))
+ 		.where(and(eq(message.conversationId, conversationId), cursor ? lt(message.sequenceNumber, cursor) : undefined))
+ 		.orderBy(desc(message.sequenceNumber))
+ 		.limit(limit);
+ 
+-	const formatted = rows.map(formatMessage);
++	if (rows.length === 0) return [];
++
++	const messageIds = rows.map((r) => r.id);
++	const reactionsRows = await db
++		.select()
++		.from(messageReaction)
++		.where(inArray(messageReaction.messageId, messageIds));
++
++	const reactionsByMsgId = reactionsRows.reduce((acc, curr) => {
++		if (!acc[curr.messageId]) acc[curr.messageId] = [];
++		acc[curr.messageId].push(curr);
++		return acc;
++	}, {} as Record<string, ReactionResponse[]>);
++
++	const formatted = rows.map((r) => formatMessage({ ...r, reactions: reactionsByMsgId[r.id] ?? [] }));

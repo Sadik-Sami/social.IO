@@ -173,6 +173,7 @@ export const editMessageBodySchema = z.object({
 export const messageResponseSchema = messageSelectSchema.omit({ contentEnc: true, contentIv: true }).extend({
 	content: z.string().max(MESSAGE_CONTENT_MAX).nullable(),
 	senderDisplayName: z.string().nullable().optional(),
+	reactions: z.array(messageReactionSelectSchema).default([]),
 });
 
 export const messageListQuerySchema = z.object({

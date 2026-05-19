@@ -13,7 +13,7 @@ import {
 } from '@/validators';
 import { db } from '@socialIO/db';
 import { conversation, message, messageEditHistory, messageReaction, participant, userProfile } from '@socialIO/db/schema';
-import { and, desc, eq, isNull, lt, max, ne } from 'drizzle-orm';
+import { and, desc, eq, isNull, lt, max, ne, inArray } from 'drizzle-orm';
 import { HTTPException } from 'hono/http-exception';
 import {
 	cacheAddMessage,
@@ -27,11 +27,47 @@ import { isUserInRoom } from '@/ws/registry';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
-function formatMessage(row: MessageSelect & { senderDisplayName?: string | null }): MessageResponse {
+const messageSelectCols = {
+	id: message.id,
+	conversationId: message.conversationId,
+	senderId: message.senderId,
+	sequenceNumber: message.sequenceNumber,
+	contentEnc: message.contentEnc,
+	contentIv: message.contentIv,
+	type: message.type,
+	imageUrl: message.imageUrl,
+	replyToId: message.replyToId,
+	isEdited: message.isEdited,
+	editedAt: message.editedAt,
+	isDeleted: message.isDeleted,
+	deletedAt: message.deletedAt,
+	createdAt: message.createdAt,
+	senderDisplayName: userProfile.displayName,
+};
+
+
+function formatMessage(row: MessageSelect & { senderDisplayName?: string | null; reactions?: ReactionResponse[] }): MessageResponse {
 	return messageResponseSchema.parse({
 		...row,
 		content: row.isDeleted ? null : decrypt({ content_enc: row.contentEnc, content_iv: row.contentIv }),
+		reactions: row.reactions ?? [],
 	});
+}
+
+
+export async function getFullMessage(messageId: string): Promise<MessageResponse> {
+	const [msgRow] = await db
+		.select(messageSelectCols)
+		.from(message)
+		.leftJoin(userProfile, eq(message.senderId, userProfile.id))
+		.where(eq(message.id, messageId))
+		.limit(1);
+
+	if (!msgRow) throw new HTTPException(404, { message: 'Message not found' });
+
+	const reactions = await db.select().from(messageReaction).where(eq(messageReaction.messageId, messageId));
+
+	return formatMessage({ ...msgRow, reactions });
 }
 
 async function getConversationParticipantIds(conversationId: string): Promise<string[]> {
@@ -149,7 +185,7 @@ export async function sendMessage(
 		.where(eq(userProfile.id, senderId))
 		.limit(1);
 
-	const formatted = formatMessage({ ...saved, senderDisplayName: senderProfile?.displayName ?? null });
+	const formatted = formatMessage({ ...saved, senderDisplayName: senderProfile?.displayName ?? null, reactions: [] });
 
 	try {
 		await cacheAddMessage(conversationId, formatted.sequenceNumber, JSON.stringify(formatted));
@@ -218,31 +254,33 @@ export async function getMessages(
 		}
 	}
 
+
+
 	const rows = await db
-		.select({
-			id: message.id,
-			conversationId: message.conversationId,
-			senderId: message.senderId,
-			sequenceNumber: message.sequenceNumber,
-			contentEnc: message.contentEnc,
-			contentIv: message.contentIv,
-			type: message.type,
-			imageUrl: message.imageUrl,
-			replyToId: message.replyToId,
-			isEdited: message.isEdited,
-			editedAt: message.editedAt,
-			isDeleted: message.isDeleted,
-			deletedAt: message.deletedAt,
-			createdAt: message.createdAt,
-			senderDisplayName: userProfile.displayName,
-		})
+		.select(messageSelectCols)
 		.from(message)
 		.leftJoin(userProfile, eq(message.senderId, userProfile.id))
 		.where(and(eq(message.conversationId, conversationId), cursor ? lt(message.sequenceNumber, cursor) : undefined))
 		.orderBy(desc(message.sequenceNumber))
 		.limit(limit);
 
-	const formatted = rows.map(formatMessage);
+	if (rows.length === 0) return [];
+
+	const messageIds = rows.map((r) => r.id);
+	const reactionsRows = await db
+		.select()
+		.from(messageReaction)
+		.where(inArray(messageReaction.messageId, messageIds));
+
+	const reactionsByMsgId = reactionsRows.reduce((acc, curr) => {
+		if (!acc[curr.messageId]) {
+			acc[curr.messageId] = [];
+		}
+		acc[curr.messageId]!.push(curr as ReactionResponse);
+		return acc;
+	}, {} as Record<string, ReactionResponse[]>);
+
+	const formatted = rows.map((r) => formatMessage({ ...r, reactions: reactionsByMsgId[r.id] ?? [] }));
 
 	if (!cursor && formatted.length > 0) {
 		await cacheBulkAddMessages(
@@ -301,7 +339,7 @@ export async function editMessage(
 		throw new HTTPException(500, { message: 'Failed to edit message' });
 	}
 
-	const formatted = formatMessage(updated);
+	const formatted = await getFullMessage(messageId);
 
 	try {
 		await cacheUpdateMessage(existing.conversationId, formatted.sequenceNumber, JSON.stringify(formatted));
@@ -360,7 +398,7 @@ export async function softDeleteMessage(messageId: string, requestingUserId: str
 		throw new HTTPException(500, { message: 'Failed to delete message' });
 	}
 
-	const formatted = formatMessage(deleted);
+	const formatted = await getFullMessage(messageId);
 
 	try {
 		await cacheUpdateMessage(existing.conversationId, formatted.sequenceNumber, JSON.stringify(formatted));
@@ -655,6 +693,13 @@ export async function addReaction(
 	const reaction = inserted ? reactionResponseSchema.parse(inserted) : null;
 
 	if (created) {
+		const formatted = await getFullMessage(messageId);
+		try {
+			await cacheUpdateMessage(conversationId, formatted.sequenceNumber, JSON.stringify(formatted));
+		} catch {
+			console.warn('[addReaction] Failed to update cache', { conversationId, messageId });
+		}
+
 		try {
 			await publish(conversationId, {
 				type: 'reaction_update',
@@ -693,6 +738,13 @@ export async function removeReaction(
 	const removed = deleted.length > 0;
 
 	if (removed) {
+		const formatted = await getFullMessage(messageId);
+		try {
+			await cacheUpdateMessage(conversationId, formatted.sequenceNumber, JSON.stringify(formatted));
+		} catch {
+			console.warn('[removeReaction] Failed to update cache', { conversationId, messageId });
+		}
+
 		try {
 			await publish(conversationId, {
 				type: 'reaction_update',

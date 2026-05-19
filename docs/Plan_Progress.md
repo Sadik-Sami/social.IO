@@ -1,7 +1,7 @@
 # Real-Time Chat Application - Plan & Progress
 
 > Stack target: Next.js, Hono, Better Auth, Drizzle ORM, PostgreSQL, Redis, Cloudinary, WebSockets
-> Snapshot date: May 19, 2026
+> Snapshot date: May 20, 2026
 
 ---
 
@@ -23,8 +23,8 @@ This document tracks the current execution state of the social.io platform, sepa
 - `packages/config` - Shared ESLint, TS, and Prettier configs
 
 ### Current State
-- **Server:** Fully functional Hono server with Better Auth, comprehensive chat REST routes, WebSocket upgrade/fan-out, DB operations, and Redis caching.
-- **Web:** Auth pages, profile onboarding (`/profile/onboarding`), and full chat UI (sidebar conversation list, real-time message thread, composer, user search modal). A cohesive "Warm Precision" design system is implemented.
+- **Server:** Fully functional Hono server with Better Auth, comprehensive chat REST routes, WebSocket upgrade/fan-out, DB operations, and Redis caching. Includes full reaction aggregation in `getMessages`.
+- **Web:** Auth pages, profile onboarding (`/profile/onboarding`), and full chat UI (sidebar conversation list, real-time message thread, composer, user search modal). Group creation via dropdown FAB, group details modal with member management (add/remove/nickname). Inline emoji reaction picker and grouped reaction badges on messages. A cohesive "Warm Precision" design system is implemented.
 - **Data/Infra:** PostgreSQL (Drizzle ORM) and Redis. Local Docker infra is fully operational.
 
 ---
@@ -96,10 +96,10 @@ This document tracks the current execution state of the social.io platform, sepa
 - [x] Message delivered/seen lifecycle (Scalable Participant Progress Model) + realtime UI ticks
 - [x] Redis hot cache and pub/sub fan-out
 - [x] Encryption at rest for message content
-- [x] Cache invalidation on new message, edit, and delete
+- [x] Cache invalidation on new message, edit, delete, and reaction changes
 - [x] UI Design System Rework ("Warm Precision")
-- [x] Group membership admin flows (Server done, UI pending)
-- [x] Emoji reactions (Server done, UI pending)
+- [x] Group membership admin flows (Server done, UI done)
+- [x] Emoji reactions (Server done, UI done)
 - [x] Image message flow (Cloudinary signed upload)
 
 ---
@@ -137,8 +137,8 @@ This document tracks the current execution state of the social.io platform, sepa
 - [x] Group role authorization gates
 - [x] Member add/remove + nickname updates
 - [x] Reaction mutation + realtime sync
-- [ ] Group member management UI
-- [ ] Reaction picker and reaction list display
+- [x] Group member management UI (modal dialog, admin controls, nickname editing)
+- [x] Reaction picker and reaction list display (inline badges, grouped counts, WS sync)
 
 ### Day 6 - Upload + Edit + Cache Hardening
 - [x] Message edit path and cache invalidation
@@ -226,3 +226,25 @@ If we ever scale to multiple Node.js instances behind a load balancer, the share
 4. The `publishToUsers` function publishes to each user's individual channel
 
 This is a clean, isolated change to `pubsub.ts` and `handler.ts` — no schema, service, or frontend changes needed. But for our current single-instance deployment, the shared channel is the correct engineering choice: simpler, fewer moving parts, identical performance characteristics.
+
+---
+
+## 11. Gaps & Suggestions
+
+### Identified Gaps
+1. **Optimistic Reaction Updates:** Currently relies on WebSocket `reaction_update` invalidating TanStack Query cache. UX feels instant on same-tab, but has a slight network delay on slower connections.
+   - *Suggestion:* Implement `onMutate`/`onSettled` in `useAddReaction`/`useRemoveReaction` to update the cache instantly before the server responds.
+2. **Reaction Picker Scope:** Uses a static set of 8 common emojis (`COMMON_EMOJIS`).
+   - *Suggestion:* Integrate a full emoji picker library (e.g., `emoji-mart`) if users demand broader expression.
+3. **Group Self-Leave:** Admins can remove members, but no UI allows a member to leave a group voluntarily.
+   - *Suggestion:* Add "Leave Group" button in `GroupDetailsModal` for non-admins, calling a new `POST /conversations/:id/leave` endpoint.
+4. **Group Avatar Upload:** Group creation currently accepts an `avatarUrl` in the schema, but the UI lacks an avatar uploader for groups.
+   - *Suggestion:* Reuse existing `useUploadImage` hook in `CreateGroupModal` to allow custom group avatars.
+5. **Message Reply UI:** Schema supports `replyToId`, but the composer and thread UI do not expose reply functionality.
+   - *Suggestion:* Add swipe/click-to-reply on `MessageBubble`, update composer to show reply context.
+6. **Rate Limiting:** No rate limiting on message send or reaction endpoints.
+   - *Suggestion:* Implement `hono-rate-limiter` middleware for Day 7 hardening.
+
+### Day 7 Priority Adjustments
+- Rate limiting and error hardening should take precedence over deployment wiring.
+- Verify WSS works on production requires a staging environment first.

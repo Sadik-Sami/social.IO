@@ -52,6 +52,7 @@ export function useSendMessage() {
 				isDeleted: false,
 				deletedAt: null,
 				createdAt: new Date().toISOString(),
+				reactions: [],
 			};
 
 			qc.setQueryData<InfiniteData<MessagePage>>(messageKeys.list(conversationId), (old) => {

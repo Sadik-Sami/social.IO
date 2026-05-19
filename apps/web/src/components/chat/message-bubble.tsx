@@ -10,8 +10,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@socialIO/ui/components/ava
 import { useAuthStore } from "@/stores/auth-store";
 import { useChatStore } from "@/stores/chat-store";
 import { useImageUploadStore } from "@/stores/image-upload-store";
+import { useAddReaction } from "@/hooks/use-add-reaction";
+import { useRemoveReaction } from "@/hooks/use-remove-reaction";
 import type { MessageResponse } from "@/types/api";
 import { ChatImageViewer } from "./chat-image-viewer";
+import { ReactionPicker } from "./reaction-picker";
 
 /**
  * Individual message bubble with sender info, status ticks, and entrance animation.
@@ -33,6 +36,7 @@ export function MessageBubble({
 	senderAvatarUrl?: string | null;
 	onRetryImageSend: (tempId: string) => void;
 }) {
+	const currentUserId = useAuthStore((s) => s.session?.user?.id);
 	const [isViewerOpen, setIsViewerOpen] = useState(false);
 	const isOptimistic = message.id.startsWith("temp-");
 	const isFailed = false;
@@ -50,6 +54,30 @@ export function MessageBubble({
 		: `Shared image from ${message.senderDisplayName ?? "user"}`;
 	const shouldUseUnoptimized = imageSrc.startsWith("blob:") || imageSrc.startsWith("data:");
 
+	const addReaction = useAddReaction();
+	const removeReaction = useRemoveReaction();
+
+	const handleToggleReaction = (emoji: string) => {
+		if (isOptimistic) return;
+		const hasReacted = message.reactions?.some((r) => r.emoji === emoji && r.userId === currentUserId);
+		if (hasReacted) {
+			removeReaction.mutate({ messageId: message.id, emoji });
+		} else {
+			addReaction.mutate({ messageId: message.id, emoji });
+		}
+	};
+
+	// Group reactions by emoji
+	const groupedReactions = useMemo(() => {
+		const groups: Record<string, { count: number; hasReacted: boolean }> = {};
+		for (const r of message.reactions || []) {
+			if (!groups[r.emoji]) groups[r.emoji] = { count: 0, hasReacted: false };
+			groups[r.emoji].count += 1;
+			if (r.userId === currentUserId) groups[r.emoji].hasReacted = true;
+		}
+		return Object.entries(groups).map(([emoji, data]) => ({ emoji, ...data }));
+	}, [message.reactions, currentUserId]);
+
 	if (message.isDeleted) {
 		return (
 			<div className={`flex ${isOwn ? "justify-end" : "justify-start"} py-1`}>
@@ -65,7 +93,7 @@ export function MessageBubble({
 			initial={{ opacity: 0, y: 10, scale: 0.95 }}
 			animate={{ opacity: 1, y: 0, scale: 1 }}
 			transition={{ type: "spring", stiffness: 400, damping: 25 }}
-			className={`flex ${isOwn ? "justify-end" : "justify-start"} py-0.5`}
+			className={`group flex ${isOwn ? "justify-end" : "justify-start"} py-0.5`}
 		>
 			<div className={`flex max-w-[75%] items-end gap-2 ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
 				{!isOwn && (
@@ -133,7 +161,7 @@ export function MessageBubble({
 						)}
 					</div>
 
-					<div className={`mt-0.5 flex items-center gap-1 px-1 ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
+					<div className={`mt-0.5 flex flex-wrap items-center gap-1 px-1 ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
 						<span className="text-[10px] text-muted-foreground">{formatTime(message.createdAt)}</span>
 
 						{message.isEdited && <span className="text-[10px] italic text-muted-foreground">edited</span>}
@@ -160,6 +188,27 @@ export function MessageBubble({
 							>
 								Retry
 							</button>
+						)}
+
+						{!isOptimistic && <ReactionPicker onSelect={handleToggleReaction} />}
+
+						{groupedReactions.length > 0 && (
+							<div className="flex flex-wrap gap-1 ml-1 mr-1">
+								{groupedReactions.map(({ emoji, count, hasReacted }) => (
+									<button
+										key={emoji}
+										onClick={() => handleToggleReaction(emoji)}
+										className={`flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+											hasReacted
+												? "bg-primary/20 text-primary border border-primary/30"
+												: "bg-muted text-muted-foreground hover:bg-muted/80 border border-transparent"
+										}`}
+									>
+										<span>{emoji}</span>
+										<span>{count}</span>
+									</button>
+								))}
+							</div>
 						)}
 					</div>
 				</div>
