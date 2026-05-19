@@ -146,7 +146,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 
 	// Resolve display name for the conversation header
 	const headerName = getHeaderName(detail, currentUserId);
-	const headerAvatar = detail?.participants.find((p) => p.userId !== currentUserId)?.avatarUrl ?? null;
+	const headerAvatar = getHeaderAvatar(detail, currentUserId);
 
 	// Filter out current user from typing users
 	const otherTypingUsers = typingUsers.filter((id) => id !== currentUserId);
@@ -214,6 +214,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 										conversationId={conversationId}
 										isOwn={msg.senderId === currentUserId || msg.senderId === "me"}
 										showSenderName={detail?.type === "group"}
+										senderAvatarUrl={getSenderAvatar(msg.senderId, detail)}
 										onRetryImageSend={retryImageMessageSend}
 									/>
 								))}
@@ -247,6 +248,29 @@ function getHeaderName(
 	}
 
 	return detail.name ?? "Conversation";
+}
+
+function getHeaderAvatar(
+	detail: ReturnType<typeof useConversationDetail>["data"],
+	currentUserId: string | undefined,
+): string | null {
+	if (!detail) return null;
+
+	if (detail.type === "group") {
+		return detail.avatarUrl ?? null;
+	}
+
+	const other = detail.participants.find((p) => p.userId !== currentUserId);
+	return other?.avatarUrl ?? null;
+}
+
+function getSenderAvatar(
+	senderId: string,
+	detail: ReturnType<typeof useConversationDetail>["data"],
+): string | null {
+	if (!detail) return null;
+	const sender = detail.participants.find((p) => p.userId === senderId);
+	return sender?.avatarUrl ?? null;
 }
 
 function MessagesSkeleton() {

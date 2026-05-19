@@ -148,10 +148,10 @@ This document tracks the current execution state of the social.io platform, sepa
 
 ### Day 7 - Hardening + Deploy Readiness
 - [ ] Error handling and rate-limit guardrails
-- [ ] Deployment wiring (Vercel, Railway)
-- [ ] Verify WSS works on production
+- [O] Deployment wiring (Vercel, Railway)
+- [O] Verify WSS works on production
 - [ ] Error/empty/loading UX hardening
-- [ ] Failed send retry state
+- [O] Failed send retry state
 - [x] Connection lost banner (WS disconnect detection)
 
 ---

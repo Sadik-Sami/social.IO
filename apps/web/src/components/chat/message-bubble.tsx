@@ -23,12 +23,14 @@ export function MessageBubble({
 	conversationId,
 	isOwn,
 	showSenderName,
+	senderAvatarUrl,
 	onRetryImageSend,
 }: {
 	message: MessageResponse;
 	conversationId: string;
 	isOwn: boolean;
 	showSenderName: boolean;
+	senderAvatarUrl?: string | null;
 	onRetryImageSend: (tempId: string) => void;
 }) {
 	const [isViewerOpen, setIsViewerOpen] = useState(false);
@@ -68,7 +70,7 @@ export function MessageBubble({
 			<div className={`flex max-w-[75%] items-end gap-2 ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
 				{!isOwn && (
 					<Avatar className="mb-5 size-7 shrink-0">
-						<AvatarImage src={undefined} alt={message.senderDisplayName ?? "User"} />
+						<AvatarImage src={senderAvatarUrl ?? undefined} alt={message.senderDisplayName ?? "User"} />
 						<AvatarFallback className="bg-secondary/15 text-secondary text-[10px] font-semibold">
 							{(message.senderDisplayName ?? "U").substring(0, 2).toUpperCase()}
 						</AvatarFallback>
@@ -83,7 +85,7 @@ export function MessageBubble({
 					)}
 
 					<div
-						className={`rounded-[20px] ${
+						className={`rounded-4xl ${
 							hasImage ? "px-2.5 py-2" : "px-3.5 py-2"
 						} ${
 							isOwn
@@ -107,7 +109,7 @@ export function MessageBubble({
 											height={240}
 											sizes="(max-width: 768px) 70vw, 240px"
 											unoptimized={shouldUseUnoptimized}
-											className="h-auto max-w-[240px] rounded-lg object-cover"
+											className="h-auto max-w-60 rounded-lg object-cover"
 										/>
 									</button>
 
@@ -121,13 +123,13 @@ export function MessageBubble({
 									</div>
 
 								{hasCaption && (
-									<p className="px-1 text-sm leading-relaxed whitespace-pre-wrap break-words">
+									<p className="px-1 text-sm leading-relaxed whitespace-pre-wrap wrap-break-word">
 										{caption}
 									</p>
 								)}
 							</div>
 						) : (
-							<p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{message.content}</p>
+							<p className="text-sm leading-relaxed whitespace-pre-wrap wrap-break-word">{message.content}</p>
 						)}
 					</div>
 
