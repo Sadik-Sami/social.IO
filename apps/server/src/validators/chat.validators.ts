@@ -118,11 +118,22 @@ export const createMessageBodySchema = messageInsertSchema
 	.pick({ replyToId: true, imageUrl: true })
 	.extend({
 		type: messageTypeInputSchema,
-		content: z.string().min(MESSAGE_CONTENT_MIN).max(MESSAGE_CONTENT_MAX),
+		content: z.string().max(MESSAGE_CONTENT_MAX).optional().default(''),
 		tempId: z.string().optional(),
 	})
 	.superRefine((data, ctx) => {
-		if (data.type === 'image' && !data.imageUrl) {
+		const hasImage = Boolean(data.imageUrl);
+		const hasText = data.content.trim().length >= MESSAGE_CONTENT_MIN;
+
+		if (!hasImage && !hasText) {
+			ctx.addIssue({
+				code: 'custom',
+				message: 'content is required when imageUrl is not provided',
+				path: ['content'],
+			});
+		}
+
+		if (data.type === 'image' && !hasImage) {
 			ctx.addIssue({
 				code: 'custom',
 				message: 'imageUrl is required for image messages',
@@ -130,7 +141,7 @@ export const createMessageBodySchema = messageInsertSchema
 			});
 		}
 
-		if (data.type === 'text' && data.imageUrl) {
+		if (data.type === 'text' && hasImage) {
 			ctx.addIssue({
 				code: 'custom',
 				message: 'imageUrl must be empty for text messages',
@@ -146,7 +157,7 @@ export const editMessageBodySchema = z.object({
 // Status is derived client-side from participant lastDeliveredSequence / lastSeenSequence.
 // deliveredCount and seenCount are intentionally removed from the message response.
 export const messageResponseSchema = messageSelectSchema.omit({ contentEnc: true, contentIv: true }).extend({
-	content: z.string().min(MESSAGE_CONTENT_MIN).max(MESSAGE_CONTENT_MAX).nullable(),
+	content: z.string().max(MESSAGE_CONTENT_MAX).nullable(),
 	senderDisplayName: z.string().nullable().optional(),
 });
 

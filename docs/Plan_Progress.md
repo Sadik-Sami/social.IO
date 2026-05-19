@@ -144,7 +144,7 @@ This document tracks the current execution state of the social.io platform, sepa
 - [x] Display `is_deleted` messages
 - [x] Signed upload endpoint (`POST /api/upload/sign`)
 - [x] Image delete endpoint (`DELETE /api/upload/image`)
-- [ ] Image message send path and UI
+- [x] Image message send path and UI
 
 ### Day 7 - Hardening + Deploy Readiness
 - [ ] Error handling and rate-limit guardrails

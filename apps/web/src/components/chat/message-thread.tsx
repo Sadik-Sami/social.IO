@@ -10,6 +10,7 @@ import { Skeleton } from "@socialIO/ui/components/skeleton";
 import { api } from "@/lib/api";
 import { useMessages } from "@/hooks/use-messages";
 import { useConversationDetail } from "@/hooks/use-conversation-detail";
+import { useImageMessageFlow } from "@/hooks/use-image-message-flow";
 import { useAuthStore } from "@/stores/auth-store";
 import { useChatStore } from "@/stores/chat-store";
 import { useWS } from "@/components/providers/ws-provider";
@@ -36,6 +37,7 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 		fetchNextPage,
 	} = useMessages(conversationId);
 	const { send, isConnected } = useWS();
+	const { retryImageMessageSend } = useImageMessageFlow();
 	const seedParticipantProgress = useChatStore((s) => s.seedParticipantProgress);
 
 	// Seed participant progress on mount or conversation change
@@ -204,17 +206,18 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 							</div>
 						)}
 
-						<div className="space-y-1">
-							{displayMessages.map((msg) => (
-								<MessageBubble
-									key={msg.id}
-									message={msg}
-									conversationId={conversationId}
-									isOwn={msg.senderId === currentUserId || msg.senderId === "me"}
-									showSenderName={detail?.type === "group"}
-								/>
-							))}
-						</div>
+							<div className="space-y-1">
+								{displayMessages.map((msg) => (
+									<MessageBubble
+										key={msg.id}
+										message={msg}
+										conversationId={conversationId}
+										isOwn={msg.senderId === currentUserId || msg.senderId === "me"}
+										showSenderName={detail?.type === "group"}
+										onRetryImageSend={retryImageMessageSend}
+									/>
+								))}
+							</div>
 					</>
 				)}
 

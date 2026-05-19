@@ -6,22 +6,37 @@ import type { MessagePage, MessageResponse } from '@/types/api';
 
 /**
  * @description
- * Sends a message via POST and optimistically prepends it to the InfiniteData cache.
+ * Sends a text or image message via POST and optimistically prepends it to the InfiniteData cache.
  * On error, rolls back. On success, WS new_message replaces the temp entry.
  */
 export function useSendMessage() {
 	const qc = useQueryClient();
 
 	return useMutation({
-		mutationFn: (variables: { conversationId: string; content: string; tempId?: string }) =>
-			api.post(`/api/conversations/${variables.conversationId}/messages`, { content: variables.content, type: 'text', tempId: variables.tempId }),
+		mutationFn: (variables: {
+			conversationId: string;
+			content: string;
+			type: 'text' | 'image';
+			imageUrl?: string | null;
+			tempId?: string;
+			skipOptimistic?: boolean;
+		}) =>
+			api.post(`/api/conversations/${variables.conversationId}/messages`, {
+				content: variables.content,
+				type: variables.type,
+				imageUrl: variables.imageUrl ?? null,
+				tempId: variables.tempId,
+			}),
 
 		onMutate: async (variables) => {
-			const { conversationId, content } = variables;
+			const { conversationId, content, type, imageUrl, skipOptimistic } = variables;
 			await qc.cancelQueries({ queryKey: messageKeys.list(conversationId) });
 
 			const tempId = variables.tempId || `temp-${Date.now()}`;
 			variables.tempId = tempId; // attach it so mutationFn can use it
+			if (skipOptimistic) {
+				return { tempId };
+			}
 
 			const optimistic: MessageResponse = {
 				id: tempId,
@@ -29,8 +44,8 @@ export function useSendMessage() {
 				senderId: 'me',
 				sequenceNumber: -1,
 				content,
-				type: 'text',
-				imageUrl: null,
+				type,
+				imageUrl: imageUrl ?? null,
 				replyToId: null,
 				isEdited: false,
 				editedAt: null,
@@ -40,11 +55,16 @@ export function useSendMessage() {
 			};
 
 			qc.setQueryData<InfiniteData<MessagePage>>(messageKeys.list(conversationId), (old) => {
-				if (!old) return old;
+				if (!old || old.pages.length === 0) {
+					return {
+						pages: [{ messages: [optimistic], hasMore: false }],
+						pageParams: [undefined],
+					};
+				}
 				const newPages = [...old.pages];
 				newPages[0] = {
 					...newPages[0],
-					messages: [optimistic, ...newPages[0].messages],
+					messages: [optimistic, ...newPages[0].messages.filter((m) => m.id !== tempId)],
 				};
 				return { ...old, pages: newPages };
 			});
@@ -77,6 +97,7 @@ export function useSendMessage() {
 		},
 
 		onError: (_err, variables, context) => {
+			if (variables.skipOptimistic) return;
 			if (context?.tempId) {
 				qc.setQueryData<InfiniteData<MessagePage>>(messageKeys.list(variables.conversationId), (old) => {
 					if (!old) return old;
