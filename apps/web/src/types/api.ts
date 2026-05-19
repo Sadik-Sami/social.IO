@@ -70,6 +70,8 @@ export const conversationListItemSchema = conversationResponseSchema.extend({
 			userId: z.string(),
 			displayName: z.string().nullable(),
 			avatarUrl: z.string().nullable(),
+			isOnline: z.boolean().optional(),
+			lastSeenAt: z.string().nullable().optional(),
 		}),
 	),
 	lastMessage: z
@@ -96,6 +98,8 @@ export const conversationParticipantSchema = z.object({
 	avatarUrl: z.string().nullable(),
 	lastDeliveredSequence: z.number().int().min(0),
 	lastSeenSequence: z.number().int().min(0),
+	isOnline: z.boolean().optional(),
+	lastSeenAt: z.string().nullable().optional(),
 });
 
 export const conversationDetailResponseSchema = conversationResponseSchema.extend({

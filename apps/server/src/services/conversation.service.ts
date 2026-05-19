@@ -18,6 +18,7 @@ import { nanoid } from 'nanoid';
 import { decrypt } from '@socialIO/db/lib/crypto.lib';
 import { getUnreadCounts } from './message.service';
 import { publish, publishToUsers } from '@/ws/pubsub';
+import { getBulkPresence, getLastSeen } from './presence.service';
 
 /**
  * @desc Get conversation details by ID
@@ -65,9 +66,21 @@ export async function getConversationById(
 		.leftJoin(userProfile, eq(participant.userId, userProfile.id))
 		.where(and(eq(participant.conversationId, conversationId), isNull(participant.leftAt)));
 
+	const userIds = participants.map((p) => p.userId);
+	const [presenceMap, lastSeenMap] = await Promise.all([
+		getBulkPresence(userIds),
+		getLastSeen(userIds),
+	]);
+
+	const enrichedParticipants = participants.map((p) => ({
+		...p,
+		isOnline: presenceMap[p.userId] ?? false,
+		lastSeenAt: lastSeenMap[p.userId] ?? null,
+	}));
+
 	return conversationDetailResponseSchema.parse({
 		...conv,
-		participants,
+		participants: enrichedParticipants,
 	});
 }
 
@@ -232,11 +245,24 @@ export async function getUserConversations(userId: string): Promise<Conversation
 		.leftJoin(userProfile, eq(participant.userId, userProfile.id))
 		.where(and(inArray(participant.conversationId, convIds), isNull(participant.leftAt)));
 
+	// Fetch presence for all involved users
+	const uniqueUserIds = Array.from(new Set(allParticipants.map((p) => p.userId)));
+	const [presenceMap, lastSeenMap] = await Promise.all([
+		getBulkPresence(uniqueUserIds),
+		getLastSeen(uniqueUserIds),
+	]);
+
 	// Group participants by conversationId
-	const participantMap = new Map<string, { userId: string; displayName: string | null; avatarUrl: string | null }[]>();
+	const participantMap = new Map<string, any[]>();
 	for (const p of allParticipants) {
 		const list = participantMap.get(p.conversationId) ?? [];
-		list.push({ userId: p.userId, displayName: p.displayName, avatarUrl: p.avatarUrl });
+		list.push({
+			userId: p.userId,
+			displayName: p.displayName,
+			avatarUrl: p.avatarUrl,
+			isOnline: presenceMap[p.userId] ?? false,
+			lastSeenAt: lastSeenMap[p.userId] ?? null,
+		});
 		participantMap.set(p.conversationId, list);
 	}
 

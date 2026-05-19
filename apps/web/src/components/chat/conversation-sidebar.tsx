@@ -154,9 +154,15 @@ function getConversationAvatar(
 	return null;
 }
 
-function getLastMessagePreview(conv: ConversationListItem): string {
+function getLastMessagePreview(conv: ConversationListItem, currentUserId: string | undefined): string {
 	if (!conv.lastMessage) return "No messages yet";
-	if (conv.lastMessage.isDeleted) return "Message deleted";
+	
+	if (conv.lastMessage.isDeleted) {
+		const isOwn = conv.lastMessage.senderId === currentUserId;
+		const name = conv.lastMessage.senderName?.split(" ")[0] ?? "User";
+		return isOwn ? "You unsent a message" : `${name} unsent a message`;
+	}
+
 	if (conv.lastMessage.type === "image") return "Sent a photo";
 	return conv.lastMessage.content ?? "";
 }
@@ -176,17 +182,27 @@ function ConversationItem({
 }) {
 	const displayName = getConversationName(conversation, currentUserId);
 	const avatarUrl = getConversationAvatar(conversation, currentUserId);
-	const preview = getLastMessagePreview(conversation);
+	const preview = getLastMessagePreview(conversation, currentUserId);
 	const timestamp = conversation.lastMessage
 		? formatRelativeTime(conversation.lastMessage.createdAt)
 		: formatRelativeTime(conversation.createdAt);
 
 	const isOwnLastMessage = conversation.lastMessage?.senderId === currentUserId;
-	const senderPrefix = conversation.lastMessage
+	const isDeleted = conversation.lastMessage?.isDeleted ?? false;
+	const senderPrefix = conversation.lastMessage && !isDeleted
 		? isOwnLastMessage
 			? "You"
 			: (conversation.lastMessage.senderName?.split(" ")[0] ?? null)
 		: null;
+
+	const presenceMap = useChatStore((s) => s.presence);
+	const otherMember = conversation.type !== "group"
+		? conversation.participants?.find((m) => m.userId !== currentUserId)
+		: null;
+	
+	const isOnline = otherMember 
+		? presenceMap[otherMember.userId]?.online ?? otherMember.isOnline ?? false 
+		: false;
 
 	return (
 		<motion.button
@@ -201,12 +217,17 @@ function ConversationItem({
 				isActive ? "bg-primary/8 dark:bg-primary/10 shadow-[inset_3px_0_0_0_var(--color-primary)]" : ""
 			}`}
 		>
-			<Avatar className="size-11 shrink-0">
-				<AvatarImage src={avatarUrl ?? undefined} alt={displayName} />
-				<AvatarFallback className="bg-primary/12 text-primary text-xs font-semibold">
-					{getInitials(displayName)}
-				</AvatarFallback>
-			</Avatar>
+			<div className="relative">
+				<Avatar className="size-11 shrink-0">
+					<AvatarImage src={avatarUrl ?? undefined} alt={displayName} />
+					<AvatarFallback className="bg-primary/12 text-primary text-xs font-semibold">
+						{getInitials(displayName)}
+					</AvatarFallback>
+				</Avatar>
+				{conversation.type !== "group" && isOnline && (
+					<span className="absolute bottom-0 right-0 size-3 rounded-full border-2 border-background bg-green-500" />
+				)}
+			</div>
 
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				{/* Name + timestamp row */}

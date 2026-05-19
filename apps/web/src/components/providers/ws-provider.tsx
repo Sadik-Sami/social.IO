@@ -42,6 +42,7 @@ export function WSProvider({ children }: { children: React.ReactNode }) {
 	const setTypingUsers = useChatStore((s) => s.setTypingUsers);
 	const setWsStatus = useChatStore((s) => s.setWsStatus);
 	const updateParticipantProgress = useChatStore((s) => s.updateParticipantProgress);
+	const updatePresence = useChatStore((s) => s.updatePresence);
 	const wsStatus = useChatStore((s) => s.wsStatus);
 
 	const wsRef = useRef<WebSocket | null>(null);
@@ -118,8 +119,7 @@ export function WSProvider({ children }: { children: React.ReactNode }) {
 				}
 
 				case 'presence_update': {
-					// Invalidate conversations to refresh online indicators
-					queryClient.invalidateQueries({ queryKey: conversationKeys.all });
+					updatePresence(event.userId, event.online, event.lastSeenAt);
 					break;
 				}
 
@@ -172,7 +172,7 @@ export function WSProvider({ children }: { children: React.ReactNode }) {
 				}
 			}
 		},
-		[queryClient, setTypingUsers],
+		[queryClient, setTypingUsers, updateParticipantProgress, updatePresence],
 	);
 
 	/**

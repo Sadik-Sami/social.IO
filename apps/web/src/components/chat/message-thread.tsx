@@ -25,6 +25,22 @@ const EMPTY_ARRAY: string[] = [];
  * Message thread — displays messages for the active conversation.
  * Supports infinite scroll upward and auto-scroll to bottom on new messages.
  */
+function formatLastSeen(date: string | Date): string {
+	const now = Date.now();
+	const then = new Date(date).getTime();
+	const diffMs = now - then;
+	const diffMin = Math.floor(diffMs / 60_000);
+	const diffHr = Math.floor(diffMin / 60);
+
+	if (diffMin < 1) return "Active just now";
+	if (diffMin < 60) return `Active ${diffMin}m ago`;
+	if (diffHr < 24) return `Active ${diffHr}h ago`;
+	return `Active ${new Date(date).toLocaleDateString("en-US", {
+		month: "short",
+		day: "numeric",
+	})}`;
+}
+
 export function MessageThread({ conversationId }: { conversationId: string }) {
 	const currentUserId = useAuthStore((s) => s.session?.user?.id);
 	const setActiveConversation = useChatStore((s) => s.setActiveConversation);
@@ -149,6 +165,15 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 	// Resolve display name for the conversation header
 	const headerName = getHeaderName(detail, currentUserId);
 	const headerAvatar = getHeaderAvatar(detail, currentUserId);
+	
+	const presenceMap = useChatStore((s) => s.presence);
+	const otherParticipant = detail?.type !== "group" 
+		? detail?.participants?.find(p => p.userId !== currentUserId)
+		: null;
+	const otherPresence = otherParticipant ? presenceMap[otherParticipant.userId] : null;
+
+	const isOnline = otherPresence?.online ?? otherParticipant?.isOnline ?? false;
+	const lastSeenAt = otherPresence?.lastSeenAt ?? otherParticipant?.lastSeenAt ?? null;
 
 	// Filter out current user from typing users
 	const otherTypingUsers = typingUsers.filter((id) => id !== currentUserId);
@@ -175,22 +200,31 @@ export function MessageThread({ conversationId }: { conversationId: string }) {
 					disabled={detail?.type !== "group"}
 					className="flex items-center gap-2 text-left rounded-lg transition-colors hover:bg-muted/50 p-1 -ml-1 disabled:hover:bg-transparent disabled:cursor-default"
 				>
-					<Avatar className="h-9 w-9">
-						<AvatarImage src={headerAvatar ?? undefined} alt={headerName} />
-						<AvatarFallback className="bg-primary/15 text-primary text-xs font-semibold">
-							{headerName.substring(0, 2).toUpperCase()}
-						</AvatarFallback>
-					</Avatar>
+					<div className="relative">
+						<Avatar className="h-9 w-9">
+							<AvatarImage src={headerAvatar ?? undefined} alt={headerName} />
+							<AvatarFallback className="bg-primary/15 text-primary text-xs font-semibold">
+								{headerName.substring(0, 2).toUpperCase()}
+							</AvatarFallback>
+						</Avatar>
+						{detail?.type !== "group" && isOnline && (
+							<span className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-background bg-green-500" />
+						)}
+					</div>
 
 					<div className="flex flex-col min-w-0">
 						<span className="truncate text-sm font-semibold text-foreground">
 							{headerName}
 						</span>
-						{detail?.type === "group" && detail.participants && (
+						{detail?.type === "group" && detail.participants ? (
 							<span className="truncate text-xs text-muted-foreground">
 								{detail.participants.length} members
 							</span>
-						)}
+						) : detail?.type !== "group" ? (
+							<span className="truncate text-xs text-muted-foreground">
+								{isOnline ? "Active now" : lastSeenAt ? formatLastSeen(lastSeenAt) : "Offline"}
+							</span>
+						) : null}
 					</div>
 				</button>
 			</div>
