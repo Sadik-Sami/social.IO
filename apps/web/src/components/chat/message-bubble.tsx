@@ -2,16 +2,18 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
-import { Check, CheckCheck, AlertCircle } from "lucide-react";
+import { Check, CheckCheck, AlertCircle, Ban, MoreVertical, Edit2, Trash2 } from "lucide-react";
 import { motion } from "motion/react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@socialIO/ui/components/avatar";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@socialIO/ui/components/dropdown-menu";
 
 import { useAuthStore } from "@/stores/auth-store";
 import { useChatStore } from "@/stores/chat-store";
 import { useImageUploadStore } from "@/stores/image-upload-store";
 import { useAddReaction } from "@/hooks/use-add-reaction";
 import { useRemoveReaction } from "@/hooks/use-remove-reaction";
+import { useDeleteMessage } from "@/hooks/use-delete-message";
 import type { MessageResponse } from "@/types/api";
 import { ChatImageViewer } from "./chat-image-viewer";
 import { ReactionPicker } from "./reaction-picker";
@@ -78,11 +80,16 @@ export function MessageBubble({
 		return Object.entries(groups).map(([emoji, data]) => ({ emoji, ...data }));
 	}, [message.reactions, currentUserId]);
 
+	const setEditingMessage = useChatStore((s) => s.setEditingMessage);
+	const deleteMessage = useDeleteMessage();
+
 	if (message.isDeleted) {
+		const name = isOwn ? "You" : (message.senderDisplayName?.split(" ")[0] ?? "User");
 		return (
 			<div className={`flex ${isOwn ? "justify-end" : "justify-start"} py-1`}>
-				<div className="rounded-2xl bg-muted px-4 py-2">
-					<p className="text-xs italic text-muted-foreground">This message was deleted</p>
+				<div className={`flex items-center gap-1.5 rounded-2xl px-4 py-2 ${isOwn ? "bg-muted/50" : "bg-card ring-1 ring-border shadow-xs"}`}>
+					<Ban className="h-3.5 w-3.5 text-muted-foreground/70" />
+					<p className="text-xs italic text-muted-foreground/80">{name} unsent a message</p>
 				</div>
 			</div>
 		);
@@ -191,6 +198,32 @@ export function MessageBubble({
 						)}
 
 						{!isOptimistic && <ReactionPicker onSelect={handleToggleReaction} />}
+
+						{!isOptimistic && isOwn && (
+							<DropdownMenu>
+								<DropdownMenuTrigger className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground opacity-100 md:opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100 focus-visible:opacity-100 cursor-pointer">
+									<MoreVertical className="h-4 w-4" />
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align={isOwn ? "end" : "start"} className="w-32 rounded-xl p-1">
+									{message.type === "text" && (
+										<DropdownMenuItem
+											onClick={() => setEditingMessage(message)}
+											className="cursor-pointer rounded-lg px-2 py-1.5 text-xs font-medium"
+										>
+											<Edit2 className="mr-2 h-3.5 w-3.5" />
+											Edit
+										</DropdownMenuItem>
+									)}
+									<DropdownMenuItem
+										onClick={() => deleteMessage.mutate({ conversationId, messageId: message.id })}
+										className="cursor-pointer rounded-lg px-2 py-1.5 text-xs font-medium text-destructive focus:bg-destructive/10 focus:text-destructive"
+									>
+										<Trash2 className="mr-2 h-3.5 w-3.5" />
+										Unsend
+									</DropdownMenuItem>
+								</DropdownMenuContent>
+							</DropdownMenu>
+						)}
 
 						{groupedReactions.length > 0 && (
 							<div className="flex flex-wrap gap-1 ml-1 mr-1">
