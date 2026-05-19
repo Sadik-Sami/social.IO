@@ -142,10 +142,13 @@ This document tracks the current execution state of the social.io platform, sepa
 
 ### Day 6 - Upload + Edit + Cache Hardening
 - [x] Message edit path and cache invalidation
-- [x] Display `is_deleted` messages
+- [x] Display `is_deleted` messages (UX updated with inline actions)
 - [x] Signed upload endpoint (`POST /api/upload/sign`)
 - [x] Image delete endpoint (`DELETE /api/upload/image`)
 - [x] Image message send path and UI
+- [x] Message actions menu (Edit / Unsend)
+- [x] Edit message flow (Composer inline editing)
+- [x] Real-time presence UI (active dots, last seen text)
 
 ### Day 7 - Hardening + Deploy Readiness
 - [ ] Error handling and rate-limit guardrails
