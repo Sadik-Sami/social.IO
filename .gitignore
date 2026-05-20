@@ -54,3 +54,5 @@ temp
 .agents
 .github
 .claude
+.opencode
+.pnpm-store

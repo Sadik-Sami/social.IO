@@ -2,7 +2,7 @@ import { env } from "@socialIO/env/web";
 import { createAuthClient } from "better-auth/react";
 
 export const authClient = createAuthClient({
-  baseURL: env.NEXT_PUBLIC_SERVER_URL,
+  baseURL: typeof window === 'undefined' ? process.env.SSR_SERVER_URL || env.NEXT_PUBLIC_SERVER_URL : env.NEXT_PUBLIC_SERVER_URL,
 });
 
 export type Session = typeof authClient.$Infer.Session;

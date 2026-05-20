@@ -7,7 +7,7 @@ import { env } from '@socialIO/env/web';
  * Axios instance for API requests
  */
 export const api = axios.create({
-	baseURL: env.NEXT_PUBLIC_SERVER_URL,
+	baseURL: typeof window === 'undefined' ? process.env.SSR_SERVER_URL || env.NEXT_PUBLIC_SERVER_URL : env.NEXT_PUBLIC_SERVER_URL,
 	withCredentials: true,
 	headers: { 'Content-Type': 'application/json' },
 });

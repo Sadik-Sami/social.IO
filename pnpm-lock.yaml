@@ -126,13 +126,16 @@ importers:
         version: 25.8.0
       tsdown:
         specifier: ^0.22.0
-        version: 0.22.0(tsx@4.22.0)(typescript@6.0.3)
+        version: 0.22.0(tsx@4.22.0)(typescript@6.0.3)(unrun@0.3.0)
       tsx:
         specifier: ^4.22.0
         version: 4.22.0
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
+      unrun:
+        specifier: ^0.3.0
+        version: 0.3.0
 
   apps/web:
     dependencies:
@@ -3832,6 +3835,16 @@ packages:
     resolution: {integrity: sha512-pjy2bYhSsufwWlKwPc+l3cN7+wuJlK6uz0YdJEOlQDbl6jo/YlPi4mb8agUkVC8BF7V8NuzeyPNqRksA3hztKQ==}
     engines: {node: '>= 0.8'}
 
+  unrun@0.3.0:
+    resolution: {integrity: sha512-5xw2AIVS2WR9Lqhz76qDIQLxipKRidf7Nq+Iz5SZ8shk1OmRlxnc6FyI/1Q2m99WLj6cbqaKFdESfWE99KPzlA==}
+    engines: {node: ^22.13.0 || >=24.0.0}
+    hasBin: true
+    peerDependencies:
+      synckit: ^0.11.11
+    peerDependenciesMeta:
+      synckit:
+        optional: true
+
   until-async@3.0.2:
     resolution: {integrity: sha512-IiSk4HlzAMqTUseHHe3VhIGyuFmN90zMTpD3Z3y8jeQbzLIq500MVM7Jq2vUAnTKAFPJrqwkzr6PoTcPhGcOiw==}
 
@@ -6889,7 +6902,7 @@ snapshots:
       minimist: 1.2.8
       strip-bom: 3.0.0
 
-  tsdown@0.22.0(tsx@4.22.0)(typescript@6.0.3):
+  tsdown@0.22.0(tsx@4.22.0)(typescript@6.0.3)(unrun@0.3.0):
     dependencies:
       ansis: 4.3.0
       cac: 7.0.0
@@ -6909,6 +6922,7 @@ snapshots:
     optionalDependencies:
       tsx: 4.22.0
       typescript: 6.0.3
+      unrun: 0.3.0
     transitivePeerDependencies:
       - '@ts-macro/tsc'
       - '@typescript/native-preview'
@@ -6962,6 +6976,10 @@ snapshots:
   universalify@2.0.1: {}
 
   unpipe@1.0.0: {}
+
+  unrun@0.3.0:
+    dependencies:
+      rolldown: 1.0.1
 
   until-async@3.0.2: {}
 

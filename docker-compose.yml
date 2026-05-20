@@ -1,0 +1,111 @@
+name: socialIO-prod
+
+services:
+  postgres:
+    image: postgres:18.3-trixie
+    container_name: socialIO-prod-postgres
+    environment:
+      POSTGRES_DB: socialIO
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - internal
+
+  redis:
+    image: redis:8.6.3-alpine3.23
+    container_name: socialIO-prod-redis
+    command:
+      [
+        "redis-server",
+        "--save",
+        "",
+        "--appendonly",
+        "no",
+        "--maxmemory",
+        "256mb",
+        "--maxmemory-policy",
+        "allkeys-lru"
+      ]
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - internal
+
+  migrator:
+    build:
+      context: .
+      dockerfile: ./apps/server/Dockerfile
+      target: builder
+    container_name: socialIO-prod-migrator
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/socialIO
+    command: pnpm turbo run db:migrate --filter=@socialIO/db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+
+  server:
+    build:
+      context: .
+      dockerfile: ./apps/server/Dockerfile
+    container_name: socialIO-prod-server
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/socialIO
+      - REDIS_URL=redis://redis:6379
+    env_file:
+      - ./apps/server/.env
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+      - external
+
+  web:
+    build:
+      context: .
+      dockerfile: ./apps/web/Dockerfile
+    container_name: socialIO-prod-web
+    ports:
+      - "3001:3001"
+    environment:
+      - SSR_SERVER_URL=http://server:3000
+    env_file:
+      - ./apps/web/.env
+    depends_on:
+      server:
+        condition: service_started
+    networks:
+      - external
+
+networks:
+  internal:
+    internal: true
+  external:
+
+volumes:
+  postgres_data:

@@ -10,12 +10,12 @@ A high-performance, real-time chat application built with a modern TypeScript st
 
 ## ✨ Core Features
 
-*   **Real-Time Messaging:** Sub-millisecond message delivery via native WebSockets.
-*   **Live Presence & Typing:** "Active now" indicators, last-seen timestamps, and real-time typing indicators powered by Redis and Zustand.
-*   **Optimistic UI:** Messages render instantly on the client before server confirmation, ensuring a snappy feel.
-*   **Media Sharing:** Secure, signed image uploads directly to Cloudinary.
-*   **Group Chats:** Multi-user conversation support with admin roles and customizable group avatars.
-*   **Message Actions:** Edit messages inline, unsend (delete) messages, and add emoji reactions.
+- **Real-Time Messaging:** Sub-millisecond message delivery via native WebSockets.
+- **Live Presence & Typing:** "Active now" indicators, last-seen timestamps, and real-time typing indicators powered by Redis and Zustand.
+- **Optimistic UI:** Messages render instantly on the client before server confirmation, ensuring a snappy feel.
+- **Media Sharing:** Secure, signed image uploads directly to Cloudinary.
+- **Group Chats:** Multi-user conversation support with admin roles and customizable group avatars.
+- **Message Actions:** Edit messages inline, unsend (delete) messages, and add emoji reactions.
 
 ## 🏗️ Architecture
 
@@ -36,9 +36,11 @@ graph TD
     Client <-->|WebSocket| WS
     API <-->|Drizzle ORM| DB
     WS <-->|Pub/Sub & Presence| Cache
-    API <-->|Session state| Cache
+    API <-->|Session State & Read-Through Cache| Cache
     Client -->|Signed Uploads| CDN
 ```
+
+Redis operates as the central nervous system of SocialIO. For standard API requests, Hono attempts to fetch data from Redis first; if it misses, it falls back to PostgreSQL, populates the Redis cache, and returns the response. Redis also acts as the Pub/Sub broker for routing WebSocket messages across nodes and stores volatile session state.
 
 ### Real-Time Message Flow
 
@@ -63,20 +65,20 @@ sequenceDiagram
 
 ## 🚀 Tech Stack
 
-*   **Frontend:** Next.js 15, React 19, TailwindCSS, shadcn/ui, TanStack Query, Zustand, Framer Motion.
-*   **Backend:** Hono (Node.js Adapter), native `ws`, Better-Auth.
-*   **Database:** PostgreSQL, Drizzle ORM.
-*   **Infrastructure:** Redis (Pub/Sub & KV), Cloudinary (Media).
+- **Frontend:** Next.js 15, React 19, TailwindCSS, shadcn/ui, TanStack Query, Zustand, Framer Motion.
+- **Backend:** Hono (Node.js Adapter), native `ws`, Better-Auth.
+- **Database:** PostgreSQL, Drizzle ORM.
+- **Infrastructure:** Redis (Pub/Sub & KV), Cloudinary (Media).
 
 ## 🛠️ Getting Started
 
 ### Prerequisites
 
-*   Node.js (v20+)
-*   pnpm (v9+)
-*   PostgreSQL
-*   Redis
-*   Cloudinary Account
+- Node.js (v20+)
+- pnpm (v9+)
+- PostgreSQL
+- Redis
+- Cloudinary Account
 
 ### Installation
 
@@ -87,8 +89,8 @@ sequenceDiagram
     ```
 
 2.  Environment Variables Setup:
-    *   Copy `.env.example` to `.env` in `apps/server/` and configure your Postgres, Redis, and Cloudinary keys.
-    *   Copy `.env.example` to `.env` in `apps/web/` and set your public API URLs.
+    - Copy `.env.example` to `.env` in `apps/server/` and configure your Postgres, Redis, and Cloudinary keys.
+    - Copy `.env.example` to `.env` in `apps/web/` and set your public API URLs.
 
 3.  Apply the database schema:
 
@@ -103,6 +105,55 @@ sequenceDiagram
     ```
 
 The web application will be available at [http://localhost:3001](http://localhost:3001) and the API runs at [http://localhost:3000](http://localhost:3000).
+
+## 🐳 Local Development vs Production
+
+SocialIO uses distinct workflows for local development and production.
+
+### Local Development (Native)
+
+We recommend running development servers natively on your machine while letting Docker handle the database and Redis infrastructure.
+
+1. **Start the Infrastructure**
+   Run PostgreSQL and Redis in the background:
+
+   ```bash
+   turbo infra:start
+   # or 'turbo infra:watch' to view logs
+   ```
+
+2. **Install Dependencies & Push Database Schema**
+
+   ```bash
+   pnpm install
+   turbo db:push
+   ```
+
+3. **Start the Apps**
+   Run the Next.js frontend and Hono backend with hot-reloading:
+   ```bash
+   turbo dev
+   ```
+
+### Easiest Testing with Docker Compose
+
+Run a minimal standalone production images utilizing Turborepo multi-stage pruning. The `docker-compose.yml` file builds isolated, non-root Alpine images for both `web` and `server`.
+
+```bash
+# Build the optimized images and start the environment
+docker compose up
+```
+
+Then visit [http://localhost:3001](http://localhost:3001) to see the production build in action.
+
+### Production Deployment
+
+Deploy minimal, standalone production images utilizing Turborepo multi-stage pruning. The `docker-compose.yml` file builds isolated, non-root Alpine images for both `web` and `server`.
+
+```bash
+# Build the optimized images and start the production environment
+docker compose up --build -d
+```
 
 ## 📁 Project Structure
 
@@ -121,22 +172,22 @@ socialIO/
 
 ## 📝 Available Scripts
 
-*   `turbo dev`: Start all applications in development mode.
-*   `turbo dev:web`: Start the Next.js frontend application.
-*   `turbo dev:server`: Start the Hono backend API & WebSocket server.
-*   `turbo check-types`: Check TypeScript types.
-*   `turbo build`: Build all workspace packages and apps.
-*   `turbo db:start`: Start a PostgreSQL database using Docker.
-*   `turbo db:watch`: Watch the PostgreSQL database.
-*   `turbo db:stop`: Stop the PostgreSQL database.
-*   `turbo db:down`: Down the PostgreSQL database.
-*   `turbo db:generate`: Generate Drizzle schema changes.
-*   `turbo db:migrate`: Run database migrations.
-*   `turbo db:push`: Push Drizzle schema changes to the PostgreSQL database.
-*   `turbo db:studio`: Launch Drizzle Studio to explore your database.
-*   `turbo infra:start`: Start the infrastructure services.
-*   `turbo infra:stop`: Stop the infrastructure services.
-*   `turbo infra:down`: Down the infrastructure services.
-*   `turbo infra:watch`: Watch the infrastructure services.
-*   `turbo redis:ping`: Ping the Redis server.
-*   `turbo redis:cli:`: Launch the Redis CLI.
+- `turbo dev`: Start all applications in development mode.
+- `turbo dev:web`: Start the Next.js frontend application.
+- `turbo dev:server`: Start the Hono backend API & WebSocket server.
+- `turbo check-types`: Check TypeScript types.
+- `turbo build`: Build all workspace packages and apps.
+- `turbo db:start`: Start a PostgreSQL database using Docker.
+- `turbo db:watch`: Watch the PostgreSQL database.
+- `turbo db:stop`: Stop the PostgreSQL database.
+- `turbo db:down`: Down the PostgreSQL database.
+- `turbo db:generate`: Generate Drizzle schema changes.
+- `turbo db:migrate`: Run database migrations.
+- `turbo db:push`: Push Drizzle schema changes to the PostgreSQL database.
+- `turbo db:studio`: Launch Drizzle Studio to explore your database.
+- `turbo infra:start`: Start the infrastructure services.
+- `turbo infra:stop`: Stop the infrastructure services.
+- `turbo infra:down`: Down the infrastructure services.
+- `turbo infra:watch`: Watch the infrastructure services.
+- `turbo redis:ping`: Ping the Redis server.
+- `turbo redis:cli:`: Launch the Redis CLI.
